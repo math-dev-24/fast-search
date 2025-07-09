@@ -240,11 +240,14 @@ npm run tauri build  # Build production
 5. Ouvrez une Pull Request
 
 ## TODO
-
-- Dans les settings possibilité d'avoir plusieurs sources
-- Ajout de filtre :
+- Ajout de filtre / trie plus ou moins avancés :
    - Poids
-   - ...
+   - date de création
+   - date d'update
+- historique des recherches
+- Détéction de nouveau fichier
+- Synchro automatique
+- Prévisualisation
 - ...
 
 ## Licence
