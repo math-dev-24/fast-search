@@ -15,6 +15,7 @@ type SearchState = {
     isLoaded: boolean;
     showPath: boolean;
     searchInPath: boolean;
+    autoSubmit: boolean;
 }
 
 export const useSearchStore = defineStore('search', {
@@ -25,10 +26,11 @@ export const useSearchStore = defineStore('search', {
         folders: [],
         isDir: false,
         inLoading: false,
-        result: [],
         isLoaded: false,
         showPath: true,
-        searchInPath: false
+        searchInPath: false,
+        result: [],
+        autoSubmit: true
     }),
 
     getters: {
@@ -89,6 +91,7 @@ export const useSearchStore = defineStore('search', {
             this.isLoaded = false;
             this.showPath = true;
             this.searchInPath = false;
+            this.autoSubmit = true;
         },
 
         async openFile(path: string) {

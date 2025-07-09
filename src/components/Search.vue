@@ -17,6 +17,7 @@
                 <div class="space-y-2">
                     <label class="text-sm font-medium">Types de fichiers</label>
                     <NSelect v-model:value="modelValue.types" :options="typeFiles" multiple
+                        @update:value="handleSearch"
                         :loading="modelValue.inLoading" :disabled="modelValue.inLoading" filterable
                         placeholder="Sélectionner les types..." class="w-full" />
                 </div>
@@ -24,30 +25,51 @@
                 <div class="space-y-2">
                     <label class="text-sm font-medium">Dossiers</label>
                     <NSelect v-model:value="modelValue.folders" :options="folders" multiple
+                        @update:value="handleSearch"
                         :loading="modelValue.inLoading" :disabled="modelValue.inLoading" filterable
                         placeholder="Sélectionner les dossiers..." class="w-full" />
                 </div>
 
 
                 <NSpace vertical class="col-span-2 mt-2">
-                    <NSwitch v-model:value="modelValue.isDir">
-                    <template #checked>
-                        <div class="flex items-center space-x-2">
-                            <NIcon size="16" class="text-blue-600">
-                                <Folder />
-                            </NIcon>
-                            <span class="text-sm font-medium">Dossiers uniquement</span>
-                        </div>
-                    </template>
-                    <template #unchecked>
-                        <div class="flex items-center space-x-2">
-                            <NIcon size="16" class="text-gray-600">
-                                <Document />
-                            </NIcon>
-                            <span class="text-sm font-medium">Tous les fichiers</span>
-                        </div>
-                    </template>
-                </NSwitch>
+                    <NSpace>
+                        <NSwitch v-model:value="modelValue.isDir" @update:value="handleSearch">
+                            <template #checked>
+                                <div class="flex items-center space-x-2">
+                                    <NIcon size="16" class="text-blue-600">
+                                        <Folder />
+                                    </NIcon>
+                                    <span class="text-sm font-medium">Dossiers uniquement</span>
+                                </div>
+                            </template>
+                            <template #unchecked>
+                                <div class="flex items-center space-x-2">
+                                    <NIcon size="16" class="text-gray-600">
+                                        <Document />
+                                    </NIcon>
+                                    <span class="text-sm font-medium">Tous les fichiers</span>
+                                </div>
+                            </template>
+                        </NSwitch>
+                        <NSwitch v-model:value="modelValue.autoSubmit">
+                            <template #checked>
+                                <div class="flex items-center space-x-2">
+                                    <NIcon size="16">
+                                        <Refresh />
+                                    </NIcon>
+                                    <span class="text-sm font-medium">Recherche automatique</span>
+                                </div>
+                            </template>
+                            <template #unchecked>
+                                <div class="flex items-center space-x-2">
+                                    <NIcon size="16">
+                                        <RefreshCircle />
+                                    </NIcon>
+                                    <span class="text-sm font-medium">Recherche manuelle</span>
+                                </div>
+                            </template>
+                        </NSwitch>
+                    </NSpace>
 
                 <div class="w-full grid grid-cols-3">
                     <NButton @click="() => {syncTypeFiles(); syncFolders()}" :disabled="modelValue.inLoading" tertiary type="info"
@@ -77,10 +99,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { NInput, NButton, NIcon, NSelect, type SelectOption, NSwitch, NSpace } from 'naive-ui';
-import { Search, SyncCircleOutline, Refresh, Folder, Document } from '@vicons/ionicons5';
+import { Search, SyncCircleOutline, Refresh, Folder, Document, RefreshCircle } from '@vicons/ionicons5';
+import { useDebounceFn } from '@vueuse/core';
 
 const modelValue = defineModel<{
     search: string;
@@ -89,6 +112,7 @@ const modelValue = defineModel<{
     isDir: boolean;
     inLoading: boolean;
     showPath: boolean;
+    autoSubmit: boolean;
 }>({
     required: true
 });
@@ -135,5 +159,17 @@ const syncFolders = async () => {
         modelValue.value.inLoading = false;
     }
 }
+
+const emitSearchDebounced = useDebounceFn(() => emit('search'), 500);
+
+const handleSearch = () => {
+    if (modelValue.value.autoSubmit && (modelValue.value.search.length > 0 || modelValue.value.types.length > 0 || modelValue.value.folders.length > 0) && !modelValue.value.inLoading) {
+        emitSearchDebounced();
+    }
+}
+
+watch(() => modelValue.value.search, () => {
+    handleSearch();
+});
 
 </script>
