@@ -50,6 +50,7 @@
                             :file="file"
                             @openFile="searchStore.openFile" 
                             @copyPath="searchStore.copyPath"
+                            @previewFile="handlePreviewFile"
                             :showPath="searchStore.showPath"
                         />
                     </div>
@@ -66,6 +67,11 @@
             </div>
         </template>
     </NSpace>
+    <FilePreview
+        :show="showPreview"
+        :file="previewFile" 
+        @update:show="showPreview = false"
+    />
 </template>
 
 <script setup lang="ts">
@@ -75,11 +81,21 @@ import Search from '../components/Search.vue';
 import CardFile from '../components/CardFile.vue';
 import CardFolder from '../components/CardFolder.vue';
 import Filter from '../components/Filter.vue';
+import FilePreview from '../components/FilePreview.vue';
 import { useSearchStore } from '../shared/store/search';
+import type { File } from '../types';
 
 const searchStore = useSearchStore();
 const maxFiles = ref<number>(20);
 const maxFolders = ref<number>(8);
+
+const previewFile = ref(null as null | File);
+const showPreview = ref(false);
+
+function handlePreviewFile(file: File) {
+    previewFile.value = file;
+    showPreview.value = true;
+}
 
 </script>
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { File } from '../types';
-import { FileTrayFull, FolderOpen, Open, Eye, CopyOutline } from '@vicons/ionicons5';
+import { FileTrayFull, FolderOpen, Open, Eye, CopyOutline, EyeOutline } from '@vicons/ionicons5';
 import { NIcon, NCard, NText, NButton, NFlex } from 'naive-ui';
 import { formatPath } from '../shared/pathFormat';
 
@@ -13,6 +13,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     (e: 'openFile', path: string): void;
     (e: 'copyPath', path: string): void;
+    (e: 'previewFile', file: File): void;
 }>();
 
 // Fonction pour déterminer l'icône et la couleur selon l'extension
@@ -54,6 +55,13 @@ const getFileIcon = (fileName: string) => {
 
 const fileIcon = computed(() => getFileIcon(props.file.name));
 
+// Vérifier si le fichier peut être prévisualisé
+const canPreview = computed(() => {
+    const extension = props.file.name.split('.').pop()?.toLowerCase();
+    const previewableExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'txt', 'md', 'json', 'xml', 'csv', 'log', 'ini', 'conf', 'cfg'];
+    return previewableExtensions.includes(extension || '');
+});
+
 </script>
 
 <template>
@@ -84,6 +92,11 @@ const fileIcon = computed(() => getFileIcon(props.file.name));
         </div>
         <template #footer>
             <NFlex x-gap="10">
+                <NButton v-if="canPreview" type="info" size="small" @click="() => emit('previewFile', file)" tertiary>
+                    <NIcon size="16">
+                        <EyeOutline />
+                    </NIcon>
+                </NButton>
                 <NButton type="primary" size="small" @click="emit('openFile', file.path)" tertiary>
                     <NIcon size="16">
                         <Open />
