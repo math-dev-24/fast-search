@@ -29,7 +29,23 @@ const getFileIcon = (fileName: string) => {
         'mp4': { icon: FileTrayFull, color: '#8b5cf6', bgColor: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)' },
         'mp3': { icon: FileTrayFull, color: '#f59e0b', bgColor: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' },
         'zip': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
-        'rar': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' }
+        'rar': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        '7z': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        'tar': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        'gz': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        'bz2': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        'xz': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        'exe': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        'msi': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        'ts': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        'tsx': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        "js": { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        "css": { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        "html": { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        "json": { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        "xml": { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        "csv": { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        "xlsx": { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
     };
     
     return iconMap[extension || ''] || { icon: FileTrayFull, color: '#6b7280', bgColor: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)' };
