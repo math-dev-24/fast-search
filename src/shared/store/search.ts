@@ -96,6 +96,15 @@ export const useSearchStore = defineStore('search', {
 
         async openFile(path: string) {
             await invoke('open_file_in_explorer', { path: path });
+        },
+
+        async copyPath(path: string) {
+            try {
+                await navigator.clipboard.writeText(path);
+                this.send_message('Chemin copié dans le presse-papiers.', 'success');
+            } catch (error) {
+                console.error('Erreur lors de la copie dans le presse-papiers:', error);
+            }
         }
     }
 });

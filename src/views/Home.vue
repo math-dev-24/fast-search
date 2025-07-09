@@ -49,6 +49,7 @@
                             :key="file.name" 
                             :file="file"
                             @openFile="searchStore.openFile" 
+                            @copyPath="searchStore.copyPath"
                             :showPath="searchStore.showPath"
                         />
                     </div>

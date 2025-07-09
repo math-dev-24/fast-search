@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { File } from '../types';
-import { FileTrayFull, FolderOpen } from '@vicons/ionicons5';
-import { NIcon, NCard, NText } from 'naive-ui';
+import { FileTrayFull, FolderOpen, Open, Eye, CopyOutline } from '@vicons/ionicons5';
+import { NIcon, NCard, NText, NButton, NFlex } from 'naive-ui';
 import { formatPath } from '../shared/pathFormat';
 
 const props = defineProps<{
@@ -12,6 +12,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (e: 'openFile', path: string): void;
+    (e: 'copyPath', path: string): void;
 }>();
 
 // Fonction pour déterminer l'icône et la couleur selon l'extension
@@ -57,8 +58,7 @@ const fileIcon = computed(() => getFileIcon(props.file.name));
 
 <template>
     <NCard 
-        hoverable 
-        @click="emit('openFile', file.path)" 
+        hoverable
         class="cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 rounded-xl border border-gray-200 hover:border-primary mb-3"
         size="small"
     >
@@ -82,5 +82,19 @@ const fileIcon = computed(() => getFileIcon(props.file.name));
                 </NText>
             </div>
         </div>
+        <template #footer>
+            <NFlex x-gap="10">
+                <NButton type="primary" size="small" @click="emit('openFile', file.path)" tertiary>
+                    <NIcon size="16">
+                        <Open />
+                    </NIcon>
+                </NButton>
+                <NButton type="warning" size="small" @click="emit('copyPath', file.path)" tertiary>
+                    <NIcon size="16">
+                        <CopyOutline />
+                    </NIcon>
+                </NButton>
+            </NFlex>
+        </template>
     </NCard>
 </template>
