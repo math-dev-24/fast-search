@@ -141,21 +141,13 @@ impl FileRepository for Db {
         Ok(())
     }
 
-    fn get_all_folders(&self) -> SqliteResult<Vec<File>> {
+    fn get_all_folders(&self) -> SqliteResult<Vec<String>> {
         let mut stmt = self.conn.prepare("SELECT DISTINCT name FROM files WHERE is_dir = 1")?;
-        let files: Vec<File> = stmt.query_map([], |row| {
-            Ok(File {
-                path: PathBuf::from(row.get::<_, String>(1)?),
-                name: row.get(2)?,
-                is_dir: row.get(3)?,
-                file_type: row.get(4)?,
-                size: row.get(5)?,
-                last_modified: row.get(6)?,
-                created_at: row.get(7)?,
-            })
+        let folders: Vec<String> = stmt.query_map([], |row| {
+            Ok(row.get(0)?)
         })?
         .collect::<SqliteResult<Vec<_>>>()?;
-        Ok(files)
+        Ok(folders)
     }
 }
 

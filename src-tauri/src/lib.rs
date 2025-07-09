@@ -115,7 +115,7 @@ fn reset_data() -> Result<(), String> {
 }   
 
 #[tauri::command]
-fn get_all_folders() -> Result<Vec<File>, String> {
+fn get_all_folders() -> Result<Vec<String>, String> {
     let service_repository = get_service_repository()?;
     let folders = service_repository.get_all_folders()?;
     Ok(folders)

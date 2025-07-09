@@ -37,7 +37,7 @@ impl<T: FileRepository> FileService<T> {
         self.repository.reset_data().map_err(|e| e.to_string())
     }
 
-    pub fn get_all_folders(&self) -> Result<Vec<File>, String> {
+    pub fn get_all_folders(&self) -> Result<Vec<String>, String> {
         self.repository.get_all_folders().map_err(|e| e.to_string())
     }
 

@@ -124,10 +124,10 @@ const syncTypeFiles = async () => {
 const syncFolders = async () => {
     modelValue.value.inLoading = true;
     try {
-        const result = await invoke<File[]>('get_all_folders');
+        const result = await invoke<string[]>('get_all_folders');
         folders.value = result.map(folder => ({
-            label: folder.name,
-            value: folder.name
+            label: folder,
+            value: folder
         }));
     } catch (error) {
         console.error(error);
