@@ -1,8 +1,13 @@
 <template>
     <NCard class="p-4">
         <NFlex vertical align="start">
-            <NAutoComplete v-model:value="modelValue.searchResult" placeholder="Filtrer les résultats..."
-                :options="options" clearable class="w-full">
+            <NAutoComplete 
+                v-model:value="modelValue.searchResult" 
+                placeholder="Filtrer les résultats..."
+                :options="searchStore.options" 
+                clearable 
+                class="w-full"
+            >
                 <template #prefix>
                     <NIcon size="16">
                         <Filter />
@@ -38,6 +43,7 @@
 <script setup lang="ts">
 import { NSwitch, NAutoComplete, NCheckbox, NIcon, NCard, NFlex } from 'naive-ui';
 import { Filter, Eye, EyeOff } from '@vicons/ionicons5';
+import { useSearchStore } from '../shared/store/search';
 
 const modelValue = defineModel<{
     searchResult: string;
@@ -47,8 +53,6 @@ const modelValue = defineModel<{
     required: true
 });
 
-defineProps<{
-    options: { label: string; value: string }[];
-}>();
+const searchStore = useSearchStore();
 
 </script>

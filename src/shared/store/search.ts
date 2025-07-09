@@ -32,15 +32,21 @@ export const useSearchStore = defineStore('search', {
     }),
 
     getters: {
-        filterResult: (state): File[] => {
-            return state.result.filter(
-                file => file.name.toLowerCase().includes(state.searchResult.toLowerCase())
+        filterResult(): File[] {
+            return this.result.filter(
+                file => file.name.toLowerCase().includes(this.searchResult.toLowerCase())
             );
         },
 
-        options: (state): { label: string; value: string }[] => {
-            const uniqueNames = [...new Set(state.result.map(file => file.name))];
-            return uniqueNames.slice(0, 5).map(name => ({
+        options(): { label: string; value: string }[] {
+            const allNames = this.result.map(file => file.name);
+            const uniqueNames = [...new Set(allNames)];
+            
+            const filteredSuggestions = uniqueNames.filter(name => 
+                name.toLowerCase().includes(this.searchResult.toLowerCase())
+            );
+            
+            return filteredSuggestions.slice(0, 5).map(name => ({
                 label: name,
                 value: name
             }));

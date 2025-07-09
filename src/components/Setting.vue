@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NButton, NModal, NCard, NInput, NIcon, NSpace, useMessage } from 'naive-ui';
+import { NButton, NModal, NCard, NDynamicInput, NIcon, NSpace, useMessage } from 'naive-ui';
 import { Settings, SyncCircle } from '@vicons/ionicons5';
 import { invoke } from '@tauri-apps/api/core';
 import { useSetting } from '../composables/useSetting';
@@ -15,10 +15,9 @@ const showSetting = ref<boolean>(false);
 
 const syncFilesAndFolders = async () => {
     inLoading.value = true;
-    try {
-        const tmp_path = setting.search_path.replace(/\\/g, "/");
 
-        await invoke('sync_files_and_folders', { path: tmp_path });
+    try {
+        await invoke('sync_files_and_folders', { path: setting.search_path });
 
         message.success('Synchronisation des fichiers et des dossiers terminée');
     } catch (error) {
@@ -47,7 +46,8 @@ const syncFilesAndFolders = async () => {
                 class="max-w-xl"
             >
                 <NSpace vertical>
-                    <NInput v-model:value="setting.search_path" placeholder="Chemin du dossier à scanner" />
+                    <p class="text-sm text-gray-400 italic">Chemin du dossier à scanner :</p>
+                    <NDynamicInput v-model:value="setting.search_path" placeholder="Chemin du dossier à scanner" />
                     <NSpace justify="end" align="center">
                         <NButton @click="syncFilesAndFolders" :loading="inLoading" :disabled="inLoading">
                             <template #icon>

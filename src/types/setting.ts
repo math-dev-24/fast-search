@@ -1,3 +1,3 @@
 export interface Setting {
-    search_path: string;
+    search_path: string[];
 }

@@ -14,7 +14,7 @@
             </NCard>
             
             <!-- Filtres -->
-            <Filter v-model="searchStore" :options="searchStore.options" />
+            <Filter v-model="searchStore" />
             
             <!-- Résultats avec design unifié -->
             <div v-if="searchStore.filterResult.length > 0" class="mt-4">
