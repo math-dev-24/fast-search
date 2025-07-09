@@ -9,7 +9,6 @@ use utils::{collect::collect_files_and_folders, generator::get_service_repositor
 use std::path::Path;
 use std::env;
 use std::process::Command;
-use std::path::PathBuf;
 
 
 #[tauri::command]
