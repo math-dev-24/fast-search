@@ -239,6 +239,14 @@ npm run tauri build  # Build production
 4. Poussez vers la branche
 5. Ouvrez une Pull Request
 
+## TODO
+
+- Dans les settings possibilité d'avoir plusieurs sources
+- Ajout de filtre :
+   - Poids
+   - ...
+- ...
+
 ## Licence
 
 MIT License - voir le fichier LICENSE pour plus de détails.
