@@ -1,0 +1,44 @@
+
+# Base de données SQLite
+
+## Configuration
+- Utilisation de **rusqlite** comme driver SQLite pour Rust
+- Base de données légère et rapide pour le traitement des données
+- Stockage local des fichiers et statistiques de recherche
+
+## Architecture
+- Pattern Repository pour l'accès aux données
+- Entités dans `src-tauri/src/entities/`
+- Services dans `src-tauri/src/services/`
+- Ports/Interfaces dans `src-tauri/src/ports/`
+
+## Bonnes pratiques
+- Toujours utiliser des requêtes préparées pour éviter les injections SQL
+- Gérer les transactions pour les opérations multiples
+- Utiliser des migrations pour les changements de schéma
+- Implémenter la gestion d'erreurs avec `Result<T, rusqlite::Error>`
+- Fermer explicitement les connexions après utilisation
+
+## Exemple d'utilisation
+```rust
+use rusqlite::{Connection, Result};
+
+// Connexion
+let conn = Connection::open("database.db")?;
+
+// Requête préparée
+let mut stmt = conn.prepare("SELECT * FROM files WHERE path LIKE ?")?;
+let rows = stmt.query_map([&search_pattern], |row| {
+    // Mapping des résultats
+})?;
+```
+
+## Tables principales
+- `files` : Informations sur les fichiers indexés
+- `stats` : Statistiques de recherche et d'utilisation
+- `settings` : Configuration de l'application
+# DB
+
+J'utilise sqlite léger et rapide pour le traitement de la données.
+
+utilisation de la librarie : rusqlite

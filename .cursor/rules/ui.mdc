@@ -1,0 +1,111 @@
+
+# UI Directive
+
+## Bibliothèques UI
+
+### Framework Principal
+- **Naive UI** pour Vue 3 : https://www.naiveui.com/en-US/os-theme
+- **Xicons** pour les icônes : https://www.xicons.org/ (Ionicons 5)
+
+## Installation et Configuration
+
+### Naive UI
+```bash
+npm install naive-ui
+npm install vfonts # Pour les polices
+```
+
+### Xicons
+```bash
+npm install @vicons/ionicons5
+```
+
+## Utilisation
+
+### Import des composants Naive UI
+
+```typescript
+import { NButton, NInput, NCard, NSpace } from 'naive-ui'
+```
+
+### Import des icônes Xicons
+```typescript
+import { SearchOutline, SettingsOutline, HomeOutline } from '@vicons/ionicons5'
+```
+
+## Composants Recommandés
+
+### Navigation
+- `NMenu` - Menu de navigation
+- `NBreadcrumb` - Fil d'Ariane
+- `NTabs` - Onglets
+
+### Layout
+- `NFlex` - Flex horizontal
+    - `vertical` - pour flex vertical
+    - Doc : https://www.naiveui.com/en-US/os-theme/components/flex
+- `HGrid` - Grid
+    - Doc : https://www.naiveui.com/en-US/os-theme/components/grid
+
+### Formulaires
+- `NForm` - Formulaire avec validation
+- `NInput` - Champs de saisie
+- `NSelect` - Sélection
+- `NCheckbox` - Cases à cocher
+- `NRadio` - Boutons radio
+- `NButton` - Boutons
+
+### Affichage
+- `NCard` - Cartes
+- `NDataTable` - Tableaux de données
+- `NList` - Listes
+- `NEmpty` - État vide
+- `NLoadingBar` - Barre de chargement
+
+### Feedback
+- `NMessage` - Messages
+- `NNotification` - Notifications
+- `NModal` - Modales
+- `NDrawer` - Tiroirs
+
+## Thème et Personnalisation
+
+### Variables CSS personnalisées
+```css
+:root {
+  --primary-color: #18a058;
+  --error-color: #d03050;
+  --warning-color: #f0a020;
+  --success-color: #18a058;
+}
+```
+
+## Bonnes Pratiques
+
+### 1. Responsive Design
+- Utilisez `NFlex` pour rendre flex que se soit vertical ou horizontal
+- Implémentez des breakpoints avec `n-grid`
+- Testez sur différentes tailles d'écran
+
+### 2. Accessibilité
+- Ajoutez des `aria-label` appropriés
+- Utilisez la navigation au clavier
+- Respectez les contrastes de couleurs
+
+### 3. Performance
+- Importez les composants de manière lazy
+- Utilisez `v-memo` pour les listes longues
+- Optimisez les re-renders
+
+### 4. UX/UI
+- Utilisez des icônes cohérentes
+- Implémentez des états de chargement
+- Fournissez des messages d'erreur clairs
+- Utilisez des animations subtiles
+
+## Ressources Utiles
+
+- [Documentation Naive UI](https://www.naiveui.com/en-US/os-theme)
+- [Galerie d'icônes Xicons](https://www.xicons.org/)
+- [Guide Vue 3 Composition API](https://vuejs.org/guide/)
+- [Tailwind CSS (si utilisé)](https://tailwindcss.com/)

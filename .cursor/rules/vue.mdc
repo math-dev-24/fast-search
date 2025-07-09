@@ -1,0 +1,17 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+
+# Vue 3 Composition API best practices
+
+## instructions
+
+1. Use TypeScript for type safety
+2. Implement proper props and emits definitions
+3. Utilize Vue 3's Teleport component when needed
+4. Use Suspense for async components
+5. Implement proper error handling
+6. Follow Vue 3 style guide and naming conventions
+7. Use Vite for fast development and building

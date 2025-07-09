@@ -1,0 +1,70 @@
+<script setup lang="ts">
+import { computed } from 'vue';
+import type { File } from '../types';
+import { FileTrayFull, FolderOpen } from '@vicons/ionicons5';
+import { NIcon, NCard, NText } from 'naive-ui';
+import { formatPath } from '../shared/pathFormat';
+
+const props = defineProps<{
+    file: File;
+    showPath: boolean;
+}>();
+
+const emit = defineEmits<{
+    (e: 'openFile', path: string): void;
+}>();
+
+// Fonction pour déterminer l'icône et la couleur selon l'extension
+const getFileIcon = (fileName: string) => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    
+    const iconMap: Record<string, { icon: any, color: string, bgColor: string }> = {
+        'pdf': { icon: FileTrayFull, color: '#ef4444', bgColor: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' },
+        'doc': { icon: FileTrayFull, color: '#2563eb', bgColor: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)' },
+        'docx': { icon: FileTrayFull, color: '#2563eb', bgColor: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)' },
+        'txt': { icon: FileTrayFull, color: '#6b7280', bgColor: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)' },
+        'jpg': { icon: FileTrayFull, color: '#10b981', bgColor: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)' },
+        'jpeg': { icon: FileTrayFull, color: '#10b981', bgColor: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)' },
+        'png': { icon: FileTrayFull, color: '#10b981', bgColor: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)' },
+        'mp4': { icon: FileTrayFull, color: '#8b5cf6', bgColor: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)' },
+        'mp3': { icon: FileTrayFull, color: '#f59e0b', bgColor: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' },
+        'zip': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' },
+        'rar': { icon: FileTrayFull, color: '#f97316', bgColor: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)' }
+    };
+    
+    return iconMap[extension || ''] || { icon: FileTrayFull, color: '#6b7280', bgColor: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)' };
+};
+
+const fileIcon = computed(() => getFileIcon(props.file.name));
+
+</script>
+
+<template>
+    <NCard 
+        hoverable 
+        @click="emit('openFile', file.path)" 
+        class="cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 rounded-xl border border-gray-200 hover:border-primary mb-3"
+        size="small"
+    >
+        <div class="flex items-center gap-3 py-2">
+            <div class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg" :style="{ background: fileIcon.bgColor }">
+                <NIcon size="24" :color="fileIcon.color">
+                    <component :is="fileIcon.icon" />
+                </NIcon>
+            </div>
+            
+            <div class="flex-1 min-w-0">
+                <NText class="block mb-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold">
+                    {{ file.name }}
+                </NText>
+                
+                <NText v-if="showPath" class="flex items-center overflow-hidden text-ellipsis whitespace-nowrap leading-tight text-xs text-gray-500" depth="3">
+                    <NIcon size="12" class="mr-1">
+                        <FolderOpen />
+                    </NIcon>
+                    {{ formatPath(file.path) }}
+                </NText>
+            </div>
+        </div>
+    </NCard>
+</template>

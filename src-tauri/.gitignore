@@ -1,0 +1,13 @@
+# Base de données
+*.sqlite
+*.db
+db.sqlite
+fast-search.db
+
+# Fichiers de build
+target/
+dist/
+
+# Fichiers temporaires
+*.tmp
+*.temp

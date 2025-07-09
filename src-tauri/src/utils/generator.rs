@@ -1,0 +1,25 @@
+use crate::adapters::repository::sqlite::Db;
+use crate::ports::repository::FileRepository;
+use crate::services::file_service::FileService;
+use std::env;
+use std::fs;
+
+
+
+fn get_db_path() -> Result<String, String> {
+    let data_dir = env::var("APPDATA")
+        .map(|appdata| format!("{}\\fast-search", appdata))
+        .or_else(|_| env::current_dir()
+            .map(|dir| dir.join("data").to_string_lossy().to_string())
+            .map_err(|e| e.to_string()))?;
+    
+    fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    Ok(format!("{}\\fast-search-db.db", data_dir))
+}
+
+
+pub fn get_service_repository() -> Result<FileService<Db>, String> {
+    let db_adapter = Db::new(&get_db_path().unwrap()).unwrap();
+    let service_repository = FileService::new(db_adapter);
+    Ok(service_repository)
+}
