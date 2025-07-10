@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 use rusqlite::{Connection, Result as SqliteResult};
 use crate::entities::file::File;
@@ -92,8 +93,11 @@ impl FileRepository for Db {
     fn get_stat(&self) -> SqliteResult<Stat> {
         let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_dir = 0")?;
         let nb_files: i64 = stmt.query_row([], |row| row.get(0))?;
-        let mut stmt = self.conn.prepare("SELECT SUM(size) FROM files WHERE is_dir = 0")?;
+        
+        // Gérer le cas où SUM(size) peut retourner NULL
+        let mut stmt = self.conn.prepare("SELECT COALESCE(SUM(size), 0) FROM files WHERE is_dir = 0")?;
         let total_size: i64 = stmt.query_row([], |row| row.get(0))?;
+        
         let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_dir = 1")?;
         let nb_folders: i64 = stmt.query_row([], |row| row.get(0))?;
         Ok(Stat { nb_files: nb_files as u32, nb_folders: nb_folders as u32, total_size: total_size as u64 })
@@ -106,7 +110,7 @@ impl FileRepository for Db {
         Ok(types)
     }
 
-    fn insert(&mut self, files: &[File]) -> SqliteResult<()> {
+    fn insert(&mut self, files: Vec<File>) -> SqliteResult<()> {
 
         let new_types = files.iter()
         .map(|file| file.file_type.clone().unwrap_or_default())
@@ -142,40 +146,44 @@ impl Db {
         Ok(count > 0)
     }
 
-    fn type_exist(&mut self, type_name: &str) -> SqliteResult<bool> {
+    fn type_exist(&self, type_name: &str) -> SqliteResult<bool> {
         let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM types WHERE name = ?")?;
         let count: i64 = stmt.query_row([type_name], |row| row.get(0))?;
         Ok(count > 0)
     }
 
-    fn insert_type(&mut self, type_name: Vec<String>) -> SqliteResult<()> {
-        let new_type: Vec<_> = type_name.iter()
-            .filter(|type_name| !self.type_exist(type_name).unwrap_or(false))
-            .collect();
-        
-        if new_type.is_empty() {
-            println!("Aucun nouveau type à insérer");
-            return Ok(());
-        }
-        
-        let tx = self.conn.transaction()?;
-        for type_name in &new_type {
-            match tx.execute("INSERT INTO types (name) VALUES (?)", [type_name]) {
-                Ok(_) => {},
-                Err(e) => {
-                    println!("Erreur lors de l'insertion du type {:?}: {}", type_name, e);
-                    return Err(e);
-                }
+    fn insert_type(&mut self, type_name: Vec<String>) -> SqliteResult<()> {      
+
+        let mut new_types = HashSet::new();
+
+        for type_name in &type_name {
+            if !self.type_exist(type_name).unwrap_or(false) {
+                new_types.insert(type_name.clone());
             }
         }
+
+        if new_types.is_empty() {
+            return Ok(());
+        }
+
+        let tx = self.conn.transaction()?;
+
+        for type_name in &new_types {
+            tx.execute("INSERT INTO types (name) VALUES (?)", [type_name])?;
+        }
+
         tx.commit()?;
         Ok(())
     }
     
-    fn insert_file(&mut self, files: &[File]) -> SqliteResult<()> {
-        let new_files: Vec<_> = files.iter()
-            .filter(|file| !self.file_exist(file).unwrap_or(false))
-            .collect();
+    fn insert_file(&mut self, files: Vec<File>) -> SqliteResult<()> {
+        let mut new_files: Vec<File> = Vec::new();
+        
+        for file in files {
+            if !self.file_exist(&file).unwrap_or(false) {
+                new_files.push(file);
+            }
+        }
         
         if new_files.is_empty() {
             println!("Aucun nouveau fichier à insérer");
@@ -183,8 +191,9 @@ impl Db {
         }
         
         let tx = self.conn.transaction()?;
+
         for file in &new_files {
-            match tx.execute("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+            tx.execute("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", 
             rusqlite::params![
                 file.path.to_str().unwrap(), 
                 file.name.as_str(), 
@@ -194,14 +203,9 @@ impl Db {
                 file.last_modified.as_ref().map(|s| s.as_str()), 
                 file.created_at.as_ref().map(|s| s.as_str())
             ]
-            ) {
-                Ok(_) => {},
-                Err(e) => {
-                    println!("Erreur lors de l'insertion du fichier {:?}: {}", file.path, e);
-                    return Err(e);
-                }
-            }
+            )?;
         }
+
         tx.commit()?;
         Ok(())
     }

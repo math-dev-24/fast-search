@@ -26,14 +26,14 @@ fn get_current_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn sync_files_and_folders(path: Vec<String>) -> Result<(), String> {
+fn sync_files_and_folders(paths: Vec<String>) -> Result<(), String> {
     
     let mut service_repository = get_service_repository()?;
 
-    for path in path {
+    for path in paths {
         println!("Début de la synchronisation pour le chemin: {}", path);
         let files = collect_files_and_folders(&Path::new(&path));
-        service_repository.insert(&files)?;
+        service_repository.insert(files)?;
     }
     
     println!("Synchronisation terminée avec succès");

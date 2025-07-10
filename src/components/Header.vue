@@ -24,6 +24,7 @@ const startSync = async () => {
   isSyncing.value = true;
   
   try {
+    console.log(setting.search_path);
     await invoke('sync_files_and_folders', { paths: setting.search_path });
     message.success('Synchronisation terminée');
   } catch (error) {

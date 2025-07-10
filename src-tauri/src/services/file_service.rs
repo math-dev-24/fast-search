@@ -29,7 +29,7 @@ impl<T: FileRepository> FileService<T> {
         self.repository.get_type_files().map_err(|e| e.to_string())
     }
 
-    pub fn insert(&mut self, files: &[File]) -> Result<(), String> {
+    pub fn insert(&mut self, files: Vec<File>) -> Result<(), String> {
         self.repository.insert(files).map_err(|e| e.to_string())
     }
 

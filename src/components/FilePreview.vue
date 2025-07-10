@@ -27,8 +27,7 @@ const show = computed({
 // Convertir le chemin de fichier en URL accessible
 const getFileUrl = async (filePath: string) => {
     try {
-        // Utiliser le protocole asset:// pour les fichiers dans Tauri
-        return `asset://${filePath}`;
+        return filePath.replace('\\', '/');
     } catch (error) {
         console.error('Erreur lors de la conversion du chemin:', error);
         return null;
@@ -83,12 +82,6 @@ const openFile = () => {
     if (props.file) {
         (window as any).__TAURI__?.shell?.open(props.file.path);
     }
-};
-
-const closeModal = () => {
-    emit('update:show', false);
-    previewContent.value = '';
-    previewError.value = '';
 };
 
 watch(() => props.file, () => {
@@ -159,16 +152,6 @@ watch(() => props.show, (newValue) => {
                         class="w-full h-full border-0"
                         title="PDF Preview"
                     />
-                </div>
-                
-                <div v-else-if="fileType === 'text'" class="h-full">
-                    <NScrollbar class="h-full">
-                        <pre class="p-4 bg-gray-50 rounded-lg text-sm font-mono whitespace-pre-wrap">{{ previewContent }}</pre>
-                    </NScrollbar>
-                </div>
-                
-                <div v-else class="flex items-center justify-center h-64 text-gray-500">
-                    <NText>Prévisualisation non disponible pour ce type de fichier</NText>
                 </div>
             </div>
         </div>

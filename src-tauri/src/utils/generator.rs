@@ -14,7 +14,7 @@ fn get_db_path() -> Result<String, String> {
             .map_err(|e| e.to_string()))?;
     
     fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
-    Ok(format!("{}\\fast-search-db.db", data_dir))
+    Ok(format!("{}\\fast-search-test.db", data_dir))
 }
 
 
