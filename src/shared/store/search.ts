@@ -9,6 +9,8 @@ type SearchState = {
     searchResult: string;
     types: string[];
     folders: string[];
+    sizeLimit: [number, number];
+    dateLimit: [number, number];
     isDir: boolean;
     inLoading: boolean;
     result: File[];
@@ -24,6 +26,8 @@ export const useSearchStore = defineStore('search', {
         searchResult: '',
         types: [],
         folders: [],
+        sizeLimit: [0, 10],
+        dateLimit: [new Date(0).getTime(), new Date().getTime()],
         isDir: false,
         inLoading: false,
         isLoaded: false,
@@ -64,7 +68,9 @@ export const useSearchStore = defineStore('search', {
                     search: this.search,
                     types: this.types,
                     isDir: this.isDir,
-                    folders: this.folders
+                    folders: this.folders,
+                    sizeLimit: this.sizeLimit.map(size => (size * 1024 * 1024).toString()).join(','),
+                    dateLimit: this.dateLimit.map(date => date.toString()).join(',')
                 });
                 this.isLoaded = true;
                 this.send_message(this.result.length + ' résultats trouvés.', 'success');

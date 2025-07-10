@@ -13,7 +13,7 @@
                 </NInput>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="grid grid-cols-2 gap-4">
                 <div class="space-y-2">
                     <label class="text-sm font-medium">Types de fichiers</label>
                     <NSelect v-model:value="modelValue.types" :options="typeFiles" multiple
@@ -28,6 +28,21 @@
                         @update:value="handleSearch"
                         :loading="modelValue.inLoading" :disabled="modelValue.inLoading" filterable
                         placeholder="Sélectionner les dossiers..." class="w-full" />
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">Date de création</label>
+                    <div class="flex items-center space-x-2">
+                        <NDatePicker v-model:value="modelValue.dateLimit" type="daterange" clearable />
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-sm font-medium">Taille (en Mo)</label>
+                    <div class="flex items-center space-x-2">
+                        <NInputNumber v-model:value="modelValue.sizeLimit[0]" placeholder="Taille minimale" :min="0" />
+                        <NInputNumber v-model:value="modelValue.sizeLimit[1]" placeholder="Taille maximale" :min="0" />
+                    </div>
                 </div>
 
 
@@ -101,7 +116,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { NInput, NButton, NIcon, NSelect, type SelectOption, NSwitch, NSpace } from 'naive-ui';
+import { NInput, NButton, NIcon, NSelect, type SelectOption, NSwitch, NSpace, NInputNumber, NDatePicker } from 'naive-ui';
 import { Search, SyncCircleOutline, Refresh, Folder, Document, RefreshCircle } from '@vicons/ionicons5';
 import { useDebounceFn } from '@vueuse/core';
 
@@ -113,6 +128,8 @@ const modelValue = defineModel<{
     inLoading: boolean;
     showPath: boolean;
     autoSubmit: boolean;
+    sizeLimit: [number, number];
+    dateLimit: [number, number];
 }>({
     required: true
 });
