@@ -1,46 +1,24 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { NSpace, NButton, NIcon, NProgress } from 'naive-ui';
+import { NSpace, NButton, NIcon, NProgress, NPopover, NText, NAlert } from 'naive-ui';
 import { RouterLink } from 'vue-router';
 import Setting from './Setting.vue';
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { SyncCircle } from '@vicons/ionicons5';
+import { useSync } from '../composables/useSync';
 
 const router = useRouter();
 const routes = router.getRoutes();
 
-const inSync = ref<boolean>(false);
-const syncProgress = ref<number>(0);
-const syncTotal = ref<number>(0);
-
-const startSync = async () => {
-    await invoke('sync_files_and_folders');
-};
-
-const valueProgress = computed(() => {
-    return Math.round(syncProgress.value * 1000) / 10;
-});
-
-listen<void>('scan_files_started', () => {
-    inSync.value = true;
-});
-
-listen<number>('scan_files_total', (event: any) => {
-    inSync.value = true;
-    syncTotal.value = event.payload;
-});
-
-listen<number>('scan_files_progress', (event: any) => {
-    syncProgress.value = event.payload;
-});
-
-listen<string>('scan_files_finished', () => {
-    inSync.value = false;
-    syncProgress.value = 0;
-});
-
+const { 
+    inSync, 
+    syncMessage, 
+    syncError, 
+    syncSuccess, 
+    startSync, 
+    valueProgress, 
+    progressStatus, 
+    statusIcon, 
+    progressText 
+} = useSync();
 </script>
 
 <template>
@@ -56,18 +34,77 @@ listen<string>('scan_files_finished', () => {
                         {{ route.name }}
                     </NButton>
                 </RouterLink>
-                <NButton @click="startSync" :loading="inSync" tertiary round type="info">
-                    <template #icon>
-                        <NIcon size="16">
-                            <SyncCircle />
-                        </NIcon>
+                
+                <!-- Bouton de sync avec popover d'info -->
+                <NPopover trigger="hover" :disabled="!inSync && !syncError && !syncSuccess">
+                    <template #trigger>
+                        <NButton 
+                            @click="startSync" 
+                            :loading="inSync" 
+                            tertiary 
+                            round 
+                            :type="progressStatus"
+                            :disabled="inSync"
+                        >
+                            <template #icon>
+                                <NIcon size="16">
+                                    <component :is="statusIcon" />
+                                </NIcon>
+                            </template>
+                            Sync
+                        </NButton>
                     </template>
-                    Sync
-                </NButton>
-                <Setting :inSync="inSync" />
+                    <div class="max-w-xs">
+                        <NText v-if="syncError" type="error">
+                            {{ syncError }}
+                        </NText>
+                        <NText v-else-if="syncSuccess" type="success">
+                            {{ syncMessage }}
+                        </NText>
+                        <div v-else-if="inSync">
+                            <NText>{{ progressText }}</NText>
+                            <div class="mt-2">
+                                <NText depth="3" class="text-xs">
+                                    {{ Math.round(valueProgress) }}% terminé
+                                </NText>
+                            </div>
+                        </div>
+                    </div>
+                </NPopover>
 
+                <Setting :inSync="inSync" />
             </NSpace>
         </NSpace>
-        <NProgress v-show="inSync" type="line" :percentage="valueProgress" :show-indicator="false" :show-text="false" :height="2" />
+        
+        <!-- Barre de progression avec couleur selon l'état -->
+        <NProgress 
+            v-show="inSync || syncError || syncSuccess" 
+            type="line" 
+            :percentage="valueProgress" 
+            :show-indicator="false" 
+            :show-text="false" 
+            :height="2"
+            :status="progressStatus"
+        />
+        
+        <!-- Message d'état visible -->
+        <div v-if="(inSync || syncError || syncSuccess) && progressText" 
+             class="px-8 py-1 text-xs text-gray-600 bg-gray-800 border-b">
+            <NText :type="progressStatus" class="truncate">
+                {{ progressText }}
+            </NText>
+        </div>
+        
+        <!-- Alerte d'erreur -->
+        <NAlert 
+            v-if="syncError" 
+            type="error" 
+            :show-icon="true"
+            closable
+            @close="syncError = ''"
+            class="mx-8 mt-2"
+        >
+            {{ syncError }}
+        </NAlert>
     </header>
 </template>
