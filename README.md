@@ -12,6 +12,10 @@ Une application de recherche rapide de fichiers construite avec Tauri, Vue.js 3 
 - 🔄 **Synchronisation** : Indexation automatique des dossiers sélectionnés
 - 📁 **Navigation** : Ouverture des fichiers dans l'explorateur système
 - 🎨 **Design responsive** : Interface adaptée à tous les écrans
+- 👁️ **Prévisualisation** : Aperçu des images et documents
+- ⚙️ **Paramètres** : Configuration des chemins de recherche
+- 📋 **Copie de chemin** : Copie rapide des chemins dans le presse-papiers
+- 🔄 **Pagination** : Chargement progressif des résultats
 
 ## Technologies utilisées
 
@@ -23,14 +27,17 @@ Une application de recherche rapide de fichiers construite avec Tauri, Vue.js 3 
 - **Pinia** - Gestion d'état
 - **Vue Router** - Routage côté client
 - **Vite** - Build tool rapide
+- **VueUse** - Utilitaires Vue.js
+- **Vicons** - Icônes modernes
 
 ### Backend
 - **Rust** - Langage système performant
-- **Tauri** - Framework pour applications desktop
+- **Tauri 2** - Framework pour applications desktop
 - **SQLite** - Base de données légère
 - **Rusqlite** - Driver SQLite pour Rust
 - **Walkdir** - Parcours de répertoires
 - **Chrono** - Gestion des dates
+- **Serde** - Sérialisation/désérialisation
 
 ## Installation
 
@@ -44,7 +51,7 @@ Une application de recherche rapide de fichiers construite avec Tauri, Vue.js 3 
 
 ```bash
 # Cloner le repository
-git clone <repository-url>
+git clone https://github.com/math-dev-24/fast-search.git
 cd fast-search
 
 # Installer les dépendances frontend
@@ -77,7 +84,7 @@ npm run tauri build
 ### 1. Synchronisation des dossiers
 
 1. Cliquez sur "Synchroniser" dans l'interface
-2. Sélectionnez le dossier à indexer
+2. Sélectionnez un ou plusieurs dossiers à indexer
 3. L'application scanne récursivement tous les fichiers et dossiers
 4. Les données sont stockées dans la base SQLite locale
 
@@ -86,13 +93,21 @@ npm run tauri build
 1. Utilisez la barre de recherche pour trouver des fichiers
 2. Filtrez par type de fichier (optionnel)
 3. Choisissez de rechercher dans les dossiers ou fichiers
-4. Les résultats s'affichent en temps réel
+4. Les résultats s'affichent en temps réel avec pagination
 
-### 3. Navigation
+### 3. Navigation et actions
 
 - **Fichiers** : Double-cliquez pour ouvrir dans l'application par défaut
 - **Dossiers** : Double-cliquez pour ouvrir dans l'explorateur
+- **Prévisualisation** : Cliquez sur l'icône d'œil pour prévisualiser
+- **Copie de chemin** : Utilisez le bouton de copie pour copier le chemin
 - **Statistiques** : Consultez les métriques d'indexation
+
+### 4. Paramètres
+
+- Accédez aux paramètres via l'icône d'engrenage
+- Configurez les chemins de recherche par défaut
+- Personnalisez l'affichage des chemins
 
 ## Architecture
 
@@ -103,6 +118,7 @@ src/
 ├── components/          # Composants réutilisables
 │   ├── CardFile.vue    # Carte d'affichage des fichiers
 │   ├── CardFolder.vue  # Carte d'affichage des dossiers
+│   ├── FilePreview.vue # Prévisualisation de fichiers
 │   ├── Filter.vue      # Composant de filtrage
 │   ├── Header.vue      # En-tête de l'application
 │   ├── Search.vue      # Barre de recherche
@@ -110,6 +126,8 @@ src/
 ├── views/              # Pages de l'application
 │   ├── Home.vue        # Page principale
 │   └── Statistique.vue # Page des statistiques
+├── composables/        # Composables Vue
+│   └── useSetting.ts   # Gestion des paramètres
 ├── shared/             # Code partagé
 │   ├── store/          # Stores Pinia
 │   │   └── search.ts   # Store de recherche
@@ -122,7 +140,7 @@ src/
 └── route.ts            # Configuration du routage
 ```
 
-### Backend (Rust + Tauri)
+### Backend (Rust + Tauri 2)
 
 ```
 src-tauri/src/
@@ -147,10 +165,11 @@ src-tauri/src/
 ### Commandes Tauri disponibles
 
 - `get_stat()` - Récupère les statistiques globales
-- `sync_files_and_folders(path: String)` - Synchronise un dossier
+- `get_current_dir()` - Récupère le répertoire courant
+- `sync_files_and_folders(paths: Vec<String>)` - Synchronise plusieurs dossiers
 - `search_files(search, types, is_dir, folders)` - Recherche de fichiers
 - `get_type_files()` - Liste des types de fichiers
-- `open_file_in_explorer(path: String)` - Ouvre un fichier
+- `open_file_in_explorer(path: String)` - Ouvre un fichier dans l'explorateur
 - `reset_data()` - Réinitialise la base de données
 - `get_all_folders()` - Récupère tous les dossiers
 
@@ -168,13 +187,35 @@ CREATE TABLE files (
     created_at TEXT
 );
 
--- Table des dossiers
-CREATE TABLE folders (
-    id INTEGER PRIMARY KEY,
-    path TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL
-);
+-- Table des types
+CREATE TABLE types (
+   id INTEGER PRIMARY KEY,
+   name TEXT NOT NULL UNIQUE
+)
 ```
+
+## Fonctionnalités avancées
+
+### Prévisualisation de fichiers
+
+L'application supporte la prévisualisation de plusieurs types de fichiers :
+- **Images** : JPG, PNG, GIF, WebP, SVG
+- **Documents** : PDF
+- **Fichiers texte** : TXT, MD, JSON, XML, CSV, LOG, INI, CONF, CFG
+
+### Gestion des paramètres
+
+- Configuration des chemins de recherche par défaut
+- Personnalisation de l'affichage
+- Sauvegarde des préférences utilisateur
+
+### Interface utilisateur
+
+- **Design responsive** : Adapté à tous les écrans
+- **Pagination intelligente** : Chargement progressif des résultats
+- **Filtres avancés** : Par type, taille, date
+- **Recherche en temps réel** : Résultats instantanés
+- **Navigation intuitive** : Actions contextuelles
 
 ## Résolution des problèmes
 
@@ -195,6 +236,10 @@ CREATE TABLE folders (
 4. **Erreurs de compilation Rust**
    - Vérifiez que Rust est à jour : `rustup update`
    - Nettoyez le cache : `cargo clean`
+
+5. **Problèmes de prévisualisation**
+   - Vérifiez que les fichiers sont accessibles
+   - Certains types de fichiers peuvent ne pas être supportés
 
 ### Logs et débogage
 
@@ -227,6 +272,7 @@ npm run test
 ```bash
 npm run dev          # Développement frontend uniquement
 npm run build        # Build frontend
+npm run preview      # Prévisualisation du build
 npm run tauri dev    # Développement complet
 npm run tauri build  # Build production
 ```
@@ -239,17 +285,34 @@ npm run tauri build  # Build production
 4. Poussez vers la branche
 5. Ouvrez une Pull Request
 
-## TODO
-- Ajout de filtre / trie plus ou moins avancés :
-   - Poids
-   - date de création
-   - date d'update
-- historique des recherches
-- Détéction de nouveau fichier
-- Synchro automatique
-- Prévisualisation
-- ...
+## Roadmap
+
+### Fonctionnalités prévues
+- [ ] Filtres avancés par poids, date de création/modification
+- [ ] Historique des recherches
+- [ ] Détection automatique de nouveaux fichiers
+- [ ] Synchronisation automatique
+- [ ] Prévisualisation de plus de types de fichiers
+- [ ] Export des résultats de recherche
+- [ ] Thèmes sombre/clair
+- [ ] Raccourcis clavier
+- [ ] Recherche dans le contenu des fichiers
+- [ ] Indexation en arrière-plan
+
+### Améliorations techniques
+- [ ] Tests unitaires et d'intégration
+- [ ] Documentation API complète
+- [ ] Optimisation des performances
+- [ ] Support multi-plateforme amélioré
+- [ ] Système de plugins
 
 ## Licence
 
 MIT License - voir le fichier LICENSE pour plus de détails.
+
+## Support
+
+Pour toute question ou problème :
+- Ouvrez une issue sur GitHub
+- Consultez la documentation
+- Vérifiez les logs de l'application
