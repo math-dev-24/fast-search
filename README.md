@@ -295,12 +295,21 @@ npm run tauri build  # Build production
 
 ## Roadmap
 
-### Fonctionnalités prévues
+### Fonctionnalités / idées à faire - en cours
+- [ ] Stocker les paths à traiter coté rust
+   - [ ] Table stockage des paths
+   - [ ] Front -> setting -> onMount -> fetch selected path
 - [X] Filtres avancés par poids, date de création/modification
-   - [ ] Fixe bug update date
-- [ ] Historique des recherches
+   - [X] Par poids
+   - [X] Par date de création
+   - [ ] Par date de modification (OK mais Bug)
+- [ ] Historique des recherches - enregister une config
+   - [ ] Table history/config
+   - [ ] Front save config
+   - [ ] slide avec liste des configs
 - [ ] Détection automatique de nouveaux fichiers
 - [ ] Synchronisation automatique
+- [ ] Meilleur gestion des prévisualisation
 - [ ] Prévisualisation de plus de types de fichiers
 - [ ] Export des résultats de recherche
 - [ ] Thèmes sombre/clair
