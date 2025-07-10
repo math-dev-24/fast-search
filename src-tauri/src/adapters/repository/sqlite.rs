@@ -13,7 +13,7 @@ pub struct Db {
 impl FileRepository for Db {
 
     fn new(path: &str) -> SqliteResult<Db> {
-        let conn = Connection::open(path)?;
+        let conn = Connection::open(path)?;        
         Ok(Self { conn })
     }
 
@@ -33,12 +33,24 @@ impl FileRepository for Db {
             [],
         )?;
 
+        let index_queries = vec![
+            "CREATE INDEX IF NOT EXISTS idx_files_name ON files(name COLLATE NOCASE)",
+            "CREATE INDEX IF NOT EXISTS idx_files_is_dir ON files(is_dir)",
+            "CREATE INDEX IF NOT EXISTS idx_files_file_type ON files(file_type)",
+            "CREATE INDEX IF NOT EXISTS idx_files_size ON files(size)",
+            "CREATE INDEX IF NOT EXISTS idx_files_last_modified ON files(last_modified)",
+            "CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_files_path ON files(path)",
+        ];
+
+        for query in index_queries {
+            let _: Result<usize, _> = self.conn.execute(query, []);
+        }
 
         self.conn.execute("CREATE TABLE IF NOT EXISTS types (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL UNIQUE
         )", [])?;
-
 
         self.conn.execute("CREATE TABLE IF NOT EXISTS paths (
             id INTEGER PRIMARY KEY,
@@ -91,16 +103,13 @@ impl FileRepository for Db {
             params.push(max.to_string());
         }
 
-
         if is_dir {
             conditions.push("is_dir = 1");
         }
         
         if !file_types.is_empty() {
             let placeholders = file_types.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-
             string_conditions.push(format!("file_type IN ({})", placeholders));
-
             params.extend(file_types.iter().map(|s| s.to_string()));
         }
         
@@ -110,7 +119,6 @@ impl FileRepository for Db {
                 .collect();
             string_conditions.push(format!("({})", folder_conditions.join(" OR ")));
         }
-        
 
         conditions.extend(string_conditions.iter().map(|s| s.as_str()));
         
@@ -120,8 +128,9 @@ impl FileRepository for Db {
             conditions.join(" AND ")
         };
         
+        // Optimisation: LIMIT pour éviter de charger trop de données
         let sql_query = format!(
-            "SELECT * FROM files WHERE {} ORDER BY name COLLATE NOCASE",
+            "SELECT * FROM files WHERE {} ORDER BY name COLLATE NOCASE LIMIT 1000",
             where_clause
         );
         
@@ -144,16 +153,28 @@ impl FileRepository for Db {
     }
 
     fn get_stat(&self) -> SqliteResult<Stat> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_dir = 0")?;
-        let nb_files: i64 = stmt.query_row([], |row| row.get(0))?;
+        // Optimisation: une seule requête au lieu de trois
+        let mut stmt = self.conn.prepare(
+            "SELECT 
+                COUNT(CASE WHEN is_dir = 0 THEN 1 END) as nb_files,
+                COUNT(CASE WHEN is_dir = 1 THEN 1 END) as nb_folders,
+                COALESCE(SUM(CASE WHEN is_dir = 0 THEN size ELSE 0 END), 0) as total_size
+             FROM files"
+        )?;
         
-        // Gérer le cas où SUM(size) peut retourner NULL
-        let mut stmt = self.conn.prepare("SELECT COALESCE(SUM(size), 0) FROM files WHERE is_dir = 0")?;
-        let total_size: i64 = stmt.query_row([], |row| row.get(0))?;
+        let result = stmt.query_row([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?
+            ))
+        })?;
         
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_dir = 1")?;
-        let nb_folders: i64 = stmt.query_row([], |row| row.get(0))?;
-        Ok(Stat { nb_files: nb_files as u32, nb_folders: nb_folders as u32, total_size: total_size as u64 })
+        Ok(Stat { 
+            nb_files: result.0 as u32, 
+            nb_folders: result.1 as u32, 
+            total_size: result.2 as u64 
+        })
     }
 
     fn get_all_types(&self) -> SqliteResult<Vec<String>> {
@@ -226,21 +247,21 @@ impl FileRepository for Db {
 impl Db {
 
     fn file_exist(&mut self, file: &File) -> SqliteResult<bool> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE path = ?")?;
-        let count: i64 = stmt.query_row([file.path.to_str().unwrap()], |row| row.get(0))?;
-        Ok(count > 0)
+        let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM files WHERE path = ? LIMIT 1)")?;
+        let exists: i64 = stmt.query_row([file.path.to_str().unwrap()], |row| row.get(0))?;
+        Ok(exists > 0)
     }
 
     fn type_exist(&self, type_name: &str) -> SqliteResult<bool> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM types WHERE name = ?")?;
-        let count: i64 = stmt.query_row([type_name], |row| row.get(0))?;
-        Ok(count > 0)
+        let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM types WHERE name = ? LIMIT 1)")?;
+        let exists: i64 = stmt.query_row([type_name], |row| row.get(0))?;
+        Ok(exists > 0)
     }
 
     fn path_exist(&self, path: &str) -> SqliteResult<bool> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM paths WHERE path = ?")?;
-        let count: i64 = stmt.query_row([path], |row| row.get(0))?;
-        Ok(count > 0)
+        let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM paths WHERE path = ? LIMIT 1)")?;
+        let exists: i64 = stmt.query_row([path], |row| row.get(0))?;
+        Ok(exists > 0)
     }
 
     fn insert_type(&mut self, type_name: Vec<String>) -> SqliteResult<()> {      
@@ -279,12 +300,13 @@ impl Db {
         if new_files.is_empty() {
             return Ok(());
         }
-        
+
         let tx = self.conn.transaction()?;
+        
+        let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")?;
 
         for file in &new_files {
-            tx.execute("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-            rusqlite::params![
+            stmt.execute(rusqlite::params![
                 file.path.to_str().unwrap(), 
                 file.name, 
                 file.is_dir, 
@@ -292,10 +314,10 @@ impl Db {
                 file.size, 
                 file.last_modified.duration_since(UNIX_EPOCH).unwrap().as_secs(), 
                 file.created_at.duration_since(UNIX_EPOCH).unwrap().as_secs()
-            ]
-            )?;
+            ])?;
         }
 
+        drop(stmt);
         tx.commit()?;
         Ok(())
     }

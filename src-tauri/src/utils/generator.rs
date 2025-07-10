@@ -14,12 +14,14 @@ fn get_db_path() -> Result<String, String> {
             .map_err(|e| e.to_string()))?;
     
     fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
-    Ok(format!("{}\\fast-search-lite.db", data_dir))
+    Ok(format!("{}\\fast-search-lite-db.db", data_dir))
 }
 
 
 pub fn get_service_repository() -> Result<FileService<Db>, String> {
-    let db_adapter = Db::new(&get_db_path().unwrap()).unwrap();
+    let db_path = get_db_path()?;
+    let db_adapter = Db::new(&db_path)
+        .map_err(|e| format!("Failed to create database: {}", e))?;
     let service_repository = FileService::new(db_adapter);
     Ok(service_repository)
 }
