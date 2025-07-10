@@ -2,6 +2,14 @@
 
 Une application de recherche rapide de fichiers construite avec Tauri, Vue.js 3 et Rust.
 
+## Screen
+
+![search demo](./assets/search.png)
+
+![setting](./assets/setting.png)
+
+![stat](./assets/stat.png)
+
 ## Fonctionnalités
 
 - 🔍 **Recherche avancée** : Recherche de fichiers et dossiers avec filtres par type
@@ -288,7 +296,8 @@ npm run tauri build  # Build production
 ## Roadmap
 
 ### Fonctionnalités prévues
-- [ ] Filtres avancés par poids, date de création/modification
+- [X] Filtres avancés par poids, date de création/modification
+   - [ ] Fixe bug update date
 - [ ] Historique des recherches
 - [ ] Détection automatique de nouveaux fichiers
 - [ ] Synchronisation automatique
@@ -298,6 +307,7 @@ npm run tauri build  # Build production
 - [ ] Raccourcis clavier
 - [ ] Recherche dans le contenu des fichiers
 - [ ] Indexation en arrière-plan
+- [ ] Progress bar avancement traitement des fichiers
 
 ### Améliorations techniques
 - [ ] Tests unitaires et d'intégration
@@ -309,10 +319,3 @@ npm run tauri build  # Build production
 ## Licence
 
 MIT License - voir le fichier LICENSE pour plus de détails.
-
-## Support
-
-Pour toute question ou problème :
-- Ouvrez une issue sur GitHub
-- Consultez la documentation
-- Vérifiez les logs de l'application
