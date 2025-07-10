@@ -9,6 +9,10 @@ const showSetting = ref<boolean>(false);
 const paths = ref<string[]>([]);
 const isLoading = ref<boolean>(false);
 
+defineProps<{
+    inSync: boolean;
+}>();
+
 onMounted(async () => {
     try {
         isLoading.value = true;
@@ -35,7 +39,7 @@ const savePaths = async () => {
 
 <template>  
     <div>
-        <NButton @click="showSetting = !showSetting" tertiary round>
+        <NButton @click="showSetting = !showSetting" tertiary round :disabled="inSync">
             <template #icon>
                 <NIcon size="16">
                     <Settings />

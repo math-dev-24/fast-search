@@ -11,7 +11,7 @@ import { SyncCircle } from '@vicons/ionicons5';
 const router = useRouter();
 const routes = router.getRoutes();
 
-const isSyncing = ref<boolean>(true);
+const inSync = ref<boolean>(false);
 const syncProgress = ref<number>(0);
 const syncTotal = ref<number>(0);
 
@@ -24,10 +24,11 @@ const valueProgress = computed(() => {
 });
 
 listen<void>('scan_files_started', () => {
-    isSyncing.value = true;
+    inSync.value = true;
 });
 
 listen<number>('scan_files_total', (event: any) => {
+    inSync.value = true;
     syncTotal.value = event.payload;
 });
 
@@ -36,7 +37,7 @@ listen<number>('scan_files_progress', (event: any) => {
 });
 
 listen<string>('scan_files_finished', () => {
-    isSyncing.value = false;
+    inSync.value = false;
     syncProgress.value = 0;
 });
 
@@ -55,7 +56,7 @@ listen<string>('scan_files_finished', () => {
                         {{ route.name }}
                     </NButton>
                 </RouterLink>
-                <NButton @click="startSync" :loading="isSyncing" tertiary round type="info">
+                <NButton @click="startSync" :loading="inSync" tertiary round type="info">
                     <template #icon>
                         <NIcon size="16">
                             <SyncCircle />
@@ -63,10 +64,10 @@ listen<string>('scan_files_finished', () => {
                     </template>
                     Sync
                 </NButton>
-                <Setting />
+                <Setting :inSync="inSync" />
 
             </NSpace>
         </NSpace>
-        <NProgress v-show="isSyncing" type="line" :percentage="valueProgress" :show-indicator="false" :show-text="false" :height="2" />
+        <NProgress v-show="inSync" type="line" :percentage="valueProgress" :show-indicator="false" :show-text="false" :height="2" />
     </header>
 </template>
