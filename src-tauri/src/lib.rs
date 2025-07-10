@@ -48,13 +48,22 @@ fn get_type_files() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-fn search_files(search: String, types: Option<Vec<String>>, is_dir: bool, folders: Option<Vec<String>>) -> Result<Vec<File>, String> {
+fn search_files(
+    search: String, 
+    types: Option<Vec<String>>, 
+    is_dir: bool, 
+    folders: Option<Vec<String>>, 
+    size_limit: Vec<usize>, 
+    date_range: Vec<usize>,
+    date_mode: String
+) -> Result<Vec<File>, String> {
+        
     let types_vec = types.unwrap_or_default();
     let folders_vec = folders.unwrap_or_default();
     
     let service_repository = get_service_repository()?;
 
-    let files = service_repository.search(&search, &types_vec, is_dir, &folders_vec)?;
+    let files = service_repository.search(&search, &types_vec, is_dir, &folders_vec, &size_limit, &date_range, &date_mode)?;
     Ok(files)
 }
 

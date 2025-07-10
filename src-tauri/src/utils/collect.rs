@@ -1,6 +1,6 @@
 use std::path::{Path};
+use std::time::{SystemTime};
 use walkdir::WalkDir;
-use chrono::{DateTime, Utc};
 use crate::entities::file::File;
 
 pub fn collect_files_and_folders(base_path: &Path) -> Vec<File> {
@@ -27,14 +27,18 @@ pub fn collect_files_and_folders(base_path: &Path) -> Vec<File> {
         if entry.path().is_dir() {
             if let Some(file_name) = entry.path().file_name() {
                 if let Some(name_str) = file_name.to_str() {
+
+                    let last_modified = entry.metadata().unwrap().modified().unwrap_or_else(|_| SystemTime::now());
+                    let created_at = entry.metadata().unwrap().created().unwrap_or_else(|_| SystemTime::now());
+
                     files.push(File {
                         path: entry.path().to_path_buf(),
                         name: name_str.to_string(),
                         is_dir: true,
                         file_type: None,
-                        size: None,
-                        last_modified: None,
-                        created_at: None,
+                        size: Some(0),
+                        last_modified: last_modified,
+                        created_at: created_at,
                     });
                 }
             }
@@ -55,12 +59,8 @@ pub fn collect_files_and_folders(base_path: &Path) -> Vec<File> {
                     };
                     
                     if let Ok(metadata) = entry.metadata() {
-                        let last_modified = metadata.modified()
-                            .map(|modified| DateTime::from(modified))
-                            .unwrap_or_else(|_| Utc::now());
-                        let created_at = metadata.created()
-                            .map(|created| DateTime::from(created))
-                            .unwrap_or_else(|_| Utc::now());
+                        let last_modified = metadata.modified().unwrap_or_else(|_| SystemTime::now());
+                        let created_at = metadata.created().unwrap_or_else(|_| SystemTime::now());
 
                         files.push(File {
                             path: path.to_path_buf(),
@@ -68,11 +68,9 @@ pub fn collect_files_and_folders(base_path: &Path) -> Vec<File> {
                             is_dir: false,
                             file_type: Some(file_type),
                             size: Some(metadata.len()),
-                            last_modified: Some(last_modified.to_rfc3339()),
-                            created_at: Some(created_at.to_rfc3339()),
+                            last_modified: last_modified,
+                            created_at: created_at,
                         });
-                    } else {
-                        println!("Impossible de lire les métadonnées pour: {:?}", path);
                     }
                 }
             }

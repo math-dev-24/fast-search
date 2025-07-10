@@ -17,8 +17,8 @@ impl<T: FileRepository> FileService<T> {
         self.repository.init().map_err(|e| e.to_string())
     }
 
-    pub fn search(&self, query: &str, file_types: &[String], is_dir: bool, folders: &[String]) -> Result<Vec<File>, String> {
-        self.repository.search(query, file_types, is_dir, folders).map_err(|e| e.to_string())
+    pub fn search(&self, query: &str, file_types: &[String], is_dir: bool, folders: &[String], size_limit: &[usize], date_range: &[usize], date_mode: &str) -> Result<Vec<File>, String> {
+        self.repository.search(query, file_types, is_dir, folders, size_limit, date_range, date_mode).map_err(|e| e.to_string())
     }
 
     pub fn get_stat(&self) -> Result<Stat, String> {

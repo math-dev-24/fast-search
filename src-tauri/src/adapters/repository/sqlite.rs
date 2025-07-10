@@ -4,6 +4,7 @@ use rusqlite::{Connection, Result as SqliteResult};
 use crate::entities::file::File;
 use crate::entities::stat::Stat;
 use crate::ports::repository::FileRepository;
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
 pub struct Db {
     pub conn: Connection,
@@ -26,8 +27,8 @@ impl FileRepository for Db {
                 is_dir INTEGER NOT NULL,
                 file_type TEXT,
                 size INTEGER,
-                last_modified TEXT,
-                created_at TEXT
+                last_modified INTEGER,
+                created_at INTEGER
             )",
             [],
         )?;
@@ -40,12 +41,49 @@ impl FileRepository for Db {
         Ok(())
     }
 
-    fn search(&self, query: &str, file_types: &[String], is_dir: bool, folders: &[String]) -> SqliteResult<Vec<File>> {
-        let search_query = format!("%{}%", query);
-        
-        let mut conditions = vec!["LOWER(name) LIKE LOWER(?)"];
-        let mut params = vec![search_query.as_str()];
+    fn search(&self, query: &str, file_types: &[String], is_dir: bool, folders: &[String], size_limit: &[usize], date_range: &[usize], date_mode: &str) -> SqliteResult<Vec<File>> {
+       
+        let mut conditions = Vec::new();
+        let mut params = Vec::new();
         let mut string_conditions = Vec::new();
+
+        if !query.trim().is_empty() {
+            let search_query = format!("%{}%", query);
+            conditions.push("LOWER(name) LIKE LOWER(?)");
+            params.push(search_query);
+        }
+
+        if size_limit.len() >= 2 && (size_limit[0] > 0 || size_limit[1] > 0) {
+            let min = size_limit[0] as i64 * 1024 * 1024;
+            let max = if size_limit[1] > 0 { 
+                size_limit[1] as i64 * 1024 * 1024 
+            } else { 
+                i64::MAX
+            };
+
+            conditions.push("size >= ? AND size <= ?");
+            params.push(min.to_string());
+            params.push(max.to_string());
+        }
+
+        if date_range.len() >= 2 && (date_range[0] > 0 || date_range[1] > 0) {
+            let min = date_range[0] as i64;
+            let max = if date_range[1] > 0 { 
+                date_range[1] as i64 
+            } else { 
+                i64::MAX
+            };
+
+            if date_mode == "create" {
+                conditions.push("created_at >= ? AND created_at <= ?");
+            } else {
+                conditions.push("last_modified >= ? AND last_modified <= ?");
+            }
+
+            params.push(min.to_string());
+            params.push(max.to_string());
+        }
+
 
         if is_dir {
             conditions.push("is_dir = 1");
@@ -53,8 +91,10 @@ impl FileRepository for Db {
         
         if !file_types.is_empty() {
             let placeholders = file_types.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+
             string_conditions.push(format!("file_type IN ({})", placeholders));
-            params.extend(file_types.iter().map(|s| s.as_str()));
+
+            params.extend(file_types.iter().map(|s| s.to_string()));
         }
         
         if !folders.is_empty() {
@@ -67,13 +107,19 @@ impl FileRepository for Db {
 
         conditions.extend(string_conditions.iter().map(|s| s.as_str()));
         
-        let where_clause = conditions.join(" AND ");
+        let where_clause = if conditions.is_empty() {
+            "1=1".to_string()
+        } else {
+            conditions.join(" AND ")
+        };
+        
         let sql_query = format!(
             "SELECT * FROM files WHERE {} ORDER BY name COLLATE NOCASE",
             where_clause
         );
         
         let mut stmt = self.conn.prepare(&sql_query)?;
+
         let result = stmt.query_map(rusqlite::params_from_iter(params), |row| {
             Ok(File {
                 path: PathBuf::from(row.get::<_, String>(1)?),
@@ -81,8 +127,8 @@ impl FileRepository for Db {
                 is_dir: row.get(3)?,
                 file_type: row.get(4)?,
                 size: row.get(5)?,
-                last_modified: row.get(6)?,
-                created_at: row.get(7)?,
+                last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
+                created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
             })
         })?
         .collect::<SqliteResult<Vec<_>>>()?;
@@ -196,12 +242,12 @@ impl Db {
             tx.execute("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", 
             rusqlite::params![
                 file.path.to_str().unwrap(), 
-                file.name.as_str(), 
+                file.name, 
                 file.is_dir, 
-                file.file_type.as_ref().map(|s| s.as_str()), 
+                file.file_type, 
                 file.size, 
-                file.last_modified.as_ref().map(|s| s.as_str()), 
-                file.created_at.as_ref().map(|s| s.as_str())
+                file.last_modified.duration_since(UNIX_EPOCH).unwrap().as_secs(), 
+                file.created_at.duration_since(UNIX_EPOCH).unwrap().as_secs()
             ]
             )?;
         }

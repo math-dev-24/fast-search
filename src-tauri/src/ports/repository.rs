@@ -9,6 +9,6 @@ pub trait FileRepository {
     fn get_stat(&self) -> SqliteResult<Stat>;
     fn get_type_files(&self) -> SqliteResult<Vec<String>>;
     fn get_all_folders(&self) -> SqliteResult<Vec<String>>;
-    fn search(&self, query: &str, file_types: &[String], is_dir: bool, folders: &[String]) -> SqliteResult<Vec<File>>;
+    fn search(&self, query: &str, file_types: &[String], is_dir: bool, folders: &[String], size_limit: &[usize], date_range: &[usize], date_mode: &str) -> SqliteResult<Vec<File>>;
     fn reset_data(&self) -> SqliteResult<()>;
 }
