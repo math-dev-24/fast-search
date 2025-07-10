@@ -31,6 +31,11 @@ impl FileRepository for Db {
             [],
         )?;
 
+        self.conn.execute("CREATE TABLE IF NOT EXISTS types (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE
+        )", [])?;
+
         Ok(())
     }
 
@@ -95,13 +100,79 @@ impl FileRepository for Db {
     }
 
     fn get_type_files(&self) -> SqliteResult<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT DISTINCT file_type FROM files WHERE file_type IS NOT NULL")?;
-        let files_type: Vec<String> = stmt.query_map([], |row| row.get(0))?
+        let mut stmt = self.conn.prepare("SELECT name FROM types")?;
+        let types: Vec<String> = stmt.query_map([], |row| row.get(0))?
             .collect::<SqliteResult<Vec<_>>>()?;
-        Ok(files_type)
+        Ok(types)
     }
 
     fn insert(&mut self, files: &[File]) -> SqliteResult<()> {
+
+        let new_types = files.iter()
+        .map(|file| file.file_type.clone().unwrap_or_default())
+        .collect::<Vec<_>>();
+
+        self.insert_type(new_types)?;
+        self.insert_file(files)?;
+
+        Ok(())
+    }
+
+    fn reset_data(&self) -> SqliteResult<()> {
+        self.conn.execute("DELETE FROM files", [])?;
+        Ok(())
+    }
+
+    fn get_all_folders(&self) -> SqliteResult<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT DISTINCT name FROM files WHERE is_dir = 1")?;
+        let folders: Vec<String> = stmt.query_map([], |row| {
+            Ok(row.get(0)?)
+        })?
+        .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(folders)
+    }
+}
+
+
+impl Db {
+
+    fn file_exist(&mut self, file: &File) -> SqliteResult<bool> {
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE path = ?")?;
+        let count: i64 = stmt.query_row([file.path.to_str().unwrap()], |row| row.get(0))?;
+        Ok(count > 0)
+    }
+
+    fn type_exist(&mut self, type_name: &str) -> SqliteResult<bool> {
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM types WHERE name = ?")?;
+        let count: i64 = stmt.query_row([type_name], |row| row.get(0))?;
+        Ok(count > 0)
+    }
+
+    fn insert_type(&mut self, type_name: Vec<String>) -> SqliteResult<()> {
+        let new_type: Vec<_> = type_name.iter()
+            .filter(|type_name| !self.type_exist(type_name).unwrap_or(false))
+            .collect();
+        
+        if new_type.is_empty() {
+            println!("Aucun nouveau type à insérer");
+            return Ok(());
+        }
+        
+        let tx = self.conn.transaction()?;
+        for type_name in &new_type {
+            match tx.execute("INSERT INTO types (name) VALUES (?)", [type_name]) {
+                Ok(_) => {},
+                Err(e) => {
+                    println!("Erreur lors de l'insertion du type {:?}: {}", type_name, e);
+                    return Err(e);
+                }
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+    
+    fn insert_file(&mut self, files: &[File]) -> SqliteResult<()> {
         let new_files: Vec<_> = files.iter()
             .filter(|file| !self.file_exist(file).unwrap_or(false))
             .collect();
@@ -132,31 +203,6 @@ impl FileRepository for Db {
             }
         }
         tx.commit()?;
-        println!("{} fichiers insérés dans la base de données", new_files.len());
         Ok(())
-    }
-
-    fn reset_data(&self) -> SqliteResult<()> {
-        self.conn.execute("DELETE FROM files", [])?;
-        Ok(())
-    }
-
-    fn get_all_folders(&self) -> SqliteResult<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT DISTINCT name FROM files WHERE is_dir = 1")?;
-        let folders: Vec<String> = stmt.query_map([], |row| {
-            Ok(row.get(0)?)
-        })?
-        .collect::<SqliteResult<Vec<_>>>()?;
-        Ok(folders)
-    }
-}
-
-
-impl Db {
-
-    fn file_exist(&mut self, file: &File) -> SqliteResult<bool> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE path = ?")?;
-        let count: i64 = stmt.query_row([file.path.to_str().unwrap()], |row| row.get(0))?;
-        Ok(count > 0)
     }
 }

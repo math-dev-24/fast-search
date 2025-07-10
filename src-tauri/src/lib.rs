@@ -6,7 +6,7 @@ mod ports;
 
 use entities::{file::File, stat::Stat};
 use utils::{collect::collect_files_and_folders, generator::get_service_repository};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::env;
 use std::process::Command;
 
@@ -62,18 +62,14 @@ fn search_files(search: String, types: Option<Vec<String>>, is_dir: bool, folder
 fn open_file_in_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        // Convertir le chemin en PathBuf et le normaliser
         let path_buf = PathBuf::from(&path);
         let canonical_path = path_buf.canonicalize()
             .map_err(|e| format!("Impossible de résoudre le chemin: {}", e))?;
         
-        // Convertir en string avec les séparateurs Windows
         let path_str = canonical_path.to_string_lossy();
         
         println!("Ouverture du fichier: {}", path_str);
         
-        // Sur Windows, utiliser explorer /select, pour sélectionner le fichier
-        // et ouvrir le dossier parent
         let mut command = Command::new("explorer");
         command.arg("/select,");
         command.arg(path_str.as_ref());
