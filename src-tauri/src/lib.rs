@@ -5,8 +5,9 @@ mod utils;
 mod ports;
 
 use entities::{file::File, stat::Stat};
-use utils::{collect::collect_files_and_folders, generator::get_service_repository};
-use std::path::{Path, PathBuf};
+use tauri::{async_runtime, Manager};
+use utils::{generator::get_service_repository, scan::scan_files_async};
+use std::path::PathBuf;
 use std::env;
 use std::process::Command;
 
@@ -26,25 +27,64 @@ fn get_current_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn sync_files_and_folders(paths: Vec<String>) -> Result<(), String> {
-    
-    let mut service_repository = get_service_repository()?;
+fn get_all_types() -> Result<Vec<String>, String> {
+    let service_repository = get_service_repository()?;
+    let type_files = service_repository.get_all_types()?;
+    Ok(type_files)
+}
 
-    for path in paths {
-        println!("Début de la synchronisation pour le chemin: {}", path);
-        let files = collect_files_and_folders(&Path::new(&path));
-        service_repository.insert(files)?;
-    }
-    
-    println!("Synchronisation terminée avec succès");
+#[tauri::command]
+fn get_all_folders() -> Result<Vec<String>, String> {
+    let service_repository = get_service_repository()?;
+    let folders = service_repository.get_all_folders()?;
+    Ok(folders)
+}
+
+#[tauri::command]   
+fn get_all_paths() -> Result<Vec<String>, String> {
+    let service_repository = get_service_repository()?;
+    let paths = service_repository.get_all_paths()?;
+    Ok(paths)
+}
+
+#[tauri::command]
+fn sync_files_and_folders(window: tauri::WebviewWindow) -> Result<(), String> {
+    let service_repository = get_service_repository().unwrap();
+    let paths = service_repository.get_all_paths().unwrap();
+    scan_files_async(window, paths);
     Ok(())
 }
 
 #[tauri::command]
-fn get_type_files() -> Result<Vec<String>, String> {
+fn reset_data() -> Result<(), String> {
     let service_repository = get_service_repository()?;
-    let type_files = service_repository.get_type_files()?;
-    Ok(type_files)
+    service_repository.reset_data()?;
+    Ok(())
+}   
+
+
+
+#[tauri::command]
+fn save_paths(paths: Vec<String>, window: tauri::WebviewWindow) -> Result<(), String> {
+    let mut service_repository = get_service_repository()?;
+    let current_paths = service_repository.get_all_paths()?;
+
+    service_repository.insert_paths(paths.clone())?;
+
+
+    let mut new_paths: Vec<String> = Vec::new();
+
+    for path in paths {
+        if !current_paths.contains(&path) {
+            new_paths.push(path);
+        }
+    }
+
+    if !new_paths.is_empty() {
+        scan_files_async(window, new_paths);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -111,39 +151,37 @@ fn open_file_in_explorer(path: String) -> Result<(), String> {
     Ok(())
 }   
 
-#[tauri::command]
-fn reset_data() -> Result<(), String> {
-    let service_repository = get_service_repository()?;
-    service_repository.reset_data()?;
-    Ok(())
-}   
-
-#[tauri::command]
-fn get_all_folders() -> Result<Vec<String>, String> {
-    let service_repository = get_service_repository()?;
-    let folders = service_repository.get_all_folders()?;
-    Ok(folders)
-}
-
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    println!("=== Tauri backend starting ===");
-    println!("Initializing database...");
-
     let service_repository = get_service_repository().unwrap();
     service_repository.init().unwrap();
 
-    println!("Initializing builder...");
     let builder = tauri::Builder::default();
     let builder = builder.plugin(tauri_plugin_opener::init());
     let builder = builder.plugin(tauri_plugin_dialog::init());
-    let builder = builder.invoke_handler(tauri::generate_handler![get_stat, sync_files_and_folders, get_current_dir, get_type_files, search_files, open_file_in_explorer, reset_data, get_all_folders]);
-    println!("Builder initialized");
-
-    println!("Running tauri application...");
-
-    builder
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    builder.invoke_handler(tauri::generate_handler![
+        get_stat, 
+        sync_files_and_folders, 
+        get_current_dir, 
+        get_all_types, search_files, 
+        open_file_in_explorer, 
+        reset_data, 
+        get_all_folders,
+        save_paths,
+        get_all_paths
+    ])
+    .setup(|app| {
+        let window = app.get_webview_window("main").unwrap();
+    
+        async_runtime::spawn(async move {
+            let service_repository = get_service_repository().unwrap();
+            let paths = service_repository.get_all_paths().unwrap();
+            scan_files_async(window, paths);
+        });
+        
+        Ok(())
+    })
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
 }

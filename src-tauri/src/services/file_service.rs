@@ -25,8 +25,12 @@ impl<T: FileRepository> FileService<T> {
         self.repository.get_stat().map_err(|e| e.to_string())
     }
 
-    pub fn get_type_files(&self) -> Result<Vec<String>, String> {
-        self.repository.get_type_files().map_err(|e| e.to_string())
+    pub fn get_all_types(&self) -> Result<Vec<String>, String> {
+        self.repository.get_all_types().map_err(|e| e.to_string())
+    }
+
+    pub fn get_all_paths(&self) -> Result<Vec<String>, String> {
+        self.repository.get_all_paths().map_err(|e| e.to_string())
     }
 
     pub fn insert(&mut self, files: Vec<File>) -> Result<(), String> {
@@ -39,6 +43,10 @@ impl<T: FileRepository> FileService<T> {
 
     pub fn get_all_folders(&self) -> Result<Vec<String>, String> {
         self.repository.get_all_folders().map_err(|e| e.to_string())
+    }
+
+    pub fn insert_paths(&mut self, paths: Vec<String>) -> Result<(), String> {
+        self.repository.insert_paths(paths).map_err(|e| e.to_string())
     }
 
 }

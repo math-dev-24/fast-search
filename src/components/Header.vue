@@ -1,39 +1,45 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { NSpace, NButton, NIcon, useMessage } from 'naive-ui';
+import { NSpace, NButton, NIcon, NProgress } from 'naive-ui';
 import { RouterLink } from 'vue-router';
-import { invoke } from '@tauri-apps/api/core';
-import { SyncCircle } from '@vicons/ionicons5';
 import Setting from './Setting.vue';
-import { useSetting } from '../composables/useSetting';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { SyncCircle } from '@vicons/ionicons5';
 
 const router = useRouter();
 const routes = router.getRoutes();
-const message = useMessage();
-const { setting } = useSetting();
 
-const isSyncing = ref(false);
+const isSyncing = ref<boolean>(true);
+const syncProgress = ref<number>(0);
+const syncTotal = ref<number>(0);
 
 const startSync = async () => {
-  if (setting.search_path.length === 0) {
-    message.warning('Aucun chemin configuré. Veuillez configurer les chemins dans les paramètres.');
-    return;
-  }
-  
-  isSyncing.value = true;
-  
-  try {
-    console.log(setting.search_path);
-    await invoke('sync_files_and_folders', { paths: setting.search_path });
-    message.success('Synchronisation terminée');
-  } catch (error) {
-    console.error(error);
-    message.error('Erreur lors de la synchronisation');
-  } finally {
-    isSyncing.value = false;
-  }
+    await invoke('sync_files_and_folders');
 };
+
+const valueProgress = computed(() => {
+    return Math.round(syncProgress.value * 1000) / 10;
+});
+
+listen<void>('scan_files_started', () => {
+    isSyncing.value = true;
+});
+
+listen<number>('scan_files_total', (event: any) => {
+    syncTotal.value = event.payload;
+});
+
+listen<number>('scan_files_progress', (event: any) => {
+    syncProgress.value = event.payload;
+});
+
+listen<string>('scan_files_finished', () => {
+    isSyncing.value = false;
+    syncProgress.value = 0;
+});
+
 </script>
 
 <template>
@@ -43,34 +49,24 @@ const startSync = async () => {
                 Fast Search
             </h1>
             <NSpace align="center">
-                <RouterLink v-for="route in routes" :key="route.path" :to="route.path" custom v-slot="{ navigate, isActive }">
+                <RouterLink v-for="route in routes" :key="route.path" :to="route.path" custom
+                    v-slot="{ navigate, isActive }">
                     <NButton :class="{ 'active': isActive }" @click="navigate">
                         {{ route.name }}
                     </NButton>
                 </RouterLink>
-                
-                <!-- Bouton de synchronisation ou indicateur -->
-                <div v-if="!isSyncing" class="flex items-center">
-                    <NButton @click="startSync" type="primary" size="small">
-                        <template #icon>
-                            <NIcon size="16">
-                                <SyncCircle />
-                            </NIcon>
-                        </template>
-                        Sync
-                    </NButton>
-                </div>
-                
-                <div v-else class="flex items-center space-x-2">
-                    <div class="flex items-center text-sm text-blue-700">
-                        <NIcon size="16" class="animate-spin mr-2">
+                <NButton @click="startSync" :loading="isSyncing" tertiary round type="info">
+                    <template #icon>
+                        <NIcon size="16">
                             <SyncCircle />
                         </NIcon>
-                        <span>Synchronisation en cours...</span>
-                    </div>
-                </div>
+                    </template>
+                    Sync
+                </NButton>
                 <Setting />
+
             </NSpace>
         </NSpace>
+        <NProgress v-show="isSyncing" type="line" :percentage="valueProgress" :show-indicator="false" :show-text="false" :height="2" />
     </header>
 </template>

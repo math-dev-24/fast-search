@@ -33,9 +33,16 @@ impl FileRepository for Db {
             [],
         )?;
 
+
         self.conn.execute("CREATE TABLE IF NOT EXISTS types (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL UNIQUE
+        )", [])?;
+
+
+        self.conn.execute("CREATE TABLE IF NOT EXISTS paths (
+            id INTEGER PRIMARY KEY,
+            path TEXT NOT NULL UNIQUE
         )", [])?;
 
         Ok(())
@@ -149,7 +156,7 @@ impl FileRepository for Db {
         Ok(Stat { nb_files: nb_files as u32, nb_folders: nb_folders as u32, total_size: total_size as u64 })
     }
 
-    fn get_type_files(&self) -> SqliteResult<Vec<String>> {
+    fn get_all_types(&self) -> SqliteResult<Vec<String>> {
         let mut stmt = self.conn.prepare("SELECT name FROM types")?;
         let types: Vec<String> = stmt.query_map([], |row| row.get(0))?
             .collect::<SqliteResult<Vec<_>>>()?;
@@ -181,6 +188,38 @@ impl FileRepository for Db {
         .collect::<SqliteResult<Vec<_>>>()?;
         Ok(folders)
     }
+
+    fn get_all_paths(&self) -> SqliteResult<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT DISTINCT path FROM paths")?;
+        let paths: Vec<String> = stmt.query_map([], |row| {
+            Ok(row.get(0)?)
+        })?
+        .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(paths)
+    }
+
+    fn insert_paths(&mut self, paths: Vec<String>) -> SqliteResult<()> {
+
+        let mut new_paths = HashSet::new();
+
+        for path in paths {
+            if !self.path_exist(&path).unwrap_or(false) {
+                new_paths.insert(path);
+            }
+        }
+
+        if new_paths.is_empty() {
+            return Ok(());
+        }
+
+        let tx = self.conn.transaction()?;
+
+        for path in new_paths {
+            tx.execute("INSERT INTO paths (path) VALUES (?)", [path])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
 }
 
 
@@ -195,6 +234,12 @@ impl Db {
     fn type_exist(&self, type_name: &str) -> SqliteResult<bool> {
         let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM types WHERE name = ?")?;
         let count: i64 = stmt.query_row([type_name], |row| row.get(0))?;
+        Ok(count > 0)
+    }
+
+    fn path_exist(&self, path: &str) -> SqliteResult<bool> {
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM paths WHERE path = ?")?;
+        let count: i64 = stmt.query_row([path], |row| row.get(0))?;
         Ok(count > 0)
     }
 
@@ -232,7 +277,6 @@ impl Db {
         }
         
         if new_files.is_empty() {
-            println!("Aucun nouveau fichier à insérer");
             return Ok(());
         }
         

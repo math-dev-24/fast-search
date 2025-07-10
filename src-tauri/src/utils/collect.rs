@@ -6,15 +6,11 @@ use crate::entities::file::File;
 pub fn collect_files_and_folders(base_path: &Path) -> Vec<File> {
     let mut files: Vec<File> = Vec::new();
 
-    println!("Début de la collecte pour le chemin: {:?}", base_path);
-
     if !base_path.exists() {
-        println!("Le chemin n'existe pas: {:?}", base_path);
         return files;
     }
 
     if !base_path.is_dir() {
-        println!("Le chemin n'est pas un dossier: {:?}", base_path);
         return files;
     }
 
@@ -77,6 +73,5 @@ pub fn collect_files_and_folders(base_path: &Path) -> Vec<File> {
         }
     }
 
-    println!("Collecte terminée - Fichiers / Dossiers : {}", files.len());
     files
 }
