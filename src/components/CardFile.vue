@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { File } from '../types';
-import { FileTrayFull, FolderOpen, Open, Eye, CopyOutline, EyeOutline } from '@vicons/ionicons5';
+import { FileTrayFull, FolderOpen, Open, CopyOutline, EyeOutline } from '@vicons/ionicons5';
 import { NIcon, NCard, NText, NButton, NFlex } from 'naive-ui';
 import { formatPath } from '../shared/pathFormat';
 

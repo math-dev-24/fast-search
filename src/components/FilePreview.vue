@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { NModal, NButton, NText, NSpin, NImage, NScrollbar } from 'naive-ui';
-import { Close, Eye } from '@vicons/ionicons5';
+import { NModal, NButton, NText, NSpin, NImage } from 'naive-ui';
+import { Eye } from '@vicons/ionicons5';
 import type { File } from '../types';
 
 const props = defineProps<{
