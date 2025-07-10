@@ -311,7 +311,8 @@ npm run tauri build  # Build production
 - [X] Synchronisation automatique au démarrage de manière asynchrone
 - [ ] Meilleur gestion des prévisualisation
 - [ ] Prévisualisation de plus de types de fichiers
-- [ ] Export des résultats de recherche
+- [X] Export des résultats de recherche
+   - [X] Format CSV
 - [ ] Thèmes sombre/clair
 - [ ] Raccourcis clavier
 - [ ] Recherche dans le contenu des fichiers

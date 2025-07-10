@@ -111,6 +111,60 @@ export const useSearchStore = defineStore('search', {
             } catch (error) {
                 console.error('Erreur lors de la copie dans le presse-papiers:', error);
             }
+        },
+
+        async exportToCsv() {
+            if (this.result.length === 0) {
+                console.warn('Aucun résultat à exporter');
+                return;
+            }
+
+            // En-têtes CSV en français
+            const headers = ['Chemin', 'Nom', 'Type', 'Taille (octets)', 'Dernière modification', 'Date de création', 'Est un dossier'];
+            
+            // Fonction pour échapper les valeurs CSV (gérer les virgules et guillemets)
+            const escapeCsvValue = (value: any): string => {
+                if (value === null || value === undefined) return '';
+                const stringValue = String(value);
+                if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+                    return `"${stringValue.replace(/"/g, '""')}"`;
+                }
+                return stringValue;
+            };
+
+            const csvRows = [
+                headers.join(','),
+                ...this.result.map(file => [
+                    escapeCsvValue(file.path),
+                    escapeCsvValue(file.name),
+                    escapeCsvValue(file.file_type || ''),
+                    escapeCsvValue(file.size || 0),
+                    escapeCsvValue(file.last_modified || ''),
+                    escapeCsvValue(file.created_at || ''),
+                    escapeCsvValue(file.is_dir ? 'Oui' : 'Non')
+                ].join(','))
+            ];
+
+            const csvContent = csvRows.join('\n');
+            
+            // Ajouter BOM pour l'encodage UTF-8 (important pour Excel)
+            const BOM = '\uFEFF';
+            const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+            
+            // Créer le lien de téléchargement
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `recherche_${new Date().toISOString().split('T')[0]}.csv`;
+            a.style.display = 'none';
+            
+            // Ajouter au DOM, cliquer et nettoyer
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            console.log(`CSV exporté avec succès: ${this.result.length} fichiers`);
         }
     }
 });

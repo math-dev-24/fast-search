@@ -14,7 +14,10 @@
                     </NIcon>
                 </template>
             </NAutoComplete>
-            <NFlex justify="space-around">
+            <NFlex justify="space-around" align="center">
+                <NButton @click="searchStore.exportToCsv" tertiary type="info">
+                    Exporter en CSV
+                </NButton>
                 <NSwitch v-model:value="modelValue.showPath">
                     <template #checked>
                         <div class="flex items-center space-x-2">
@@ -41,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { NSwitch, NAutoComplete, NCheckbox, NIcon, NCard, NFlex } from 'naive-ui';
+import { NSwitch, NAutoComplete, NCheckbox, NIcon, NCard, NFlex, NButton } from 'naive-ui';
 import { Filter, Eye, EyeOff } from '@vicons/ionicons5';
 import { useSearchStore } from '../shared/store/search';
 
