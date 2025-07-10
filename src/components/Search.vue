@@ -165,7 +165,7 @@ onMounted(async () => {
 const syncTypeFiles = async () => {
     modelValue.value.inLoading = true;
     try {
-        const result = await invoke<string[]>('get_type_files');
+        const result = await invoke<string[]>('get_all_types');
         typeFiles.value = result.map(type => ({
             label: type,
             value: type
