@@ -317,7 +317,10 @@ npm run tauri build  # Build production
 - [ ] Raccourcis clavier
 - [ ] Recherche dans le contenu des fichiers
 - [ ] Indexation en arrière-plan
-- [ ] Progress bar avancement traitement des fichiers
+   - [X] Traitement en générale
+   - [X] Au démarrage
+   - [ ] Lors d'un nouveau fichier 
+- [X] Progress bar avancement traitement des fichiers
 
 ### Améliorations techniques
 - [ ] Tests unitaires et d'intégration
