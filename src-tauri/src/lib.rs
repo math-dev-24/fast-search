@@ -7,7 +7,6 @@ mod ports;
 use entities::{file::File, stat::Stat};
 use tauri::{async_runtime, Manager};
 use utils::{generator::get_service_repository, scan::scan_files_async};
-use std::path::PathBuf;
 use std::env;
 use std::process::Command;
 
