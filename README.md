@@ -324,7 +324,6 @@ npm run tauri build  # Build production
 
 ### Améliorations techniques
 - [ ] Tests unitaires et d'intégration
-- [ ] Documentation API complète
 - [ ] Optimisation des performances
 - [ ] Support multi-plateforme amélioré
 - [ ] Système de plugins

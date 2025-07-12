@@ -28,7 +28,9 @@ impl FileRepository for Db {
                 file_type TEXT,
                 size INTEGER,
                 last_modified INTEGER,
-                created_at INTEGER
+                created_at INTEGER,
+                is_indexed INTEGER NOT NULL DEFAULT 0,
+                content_indexed INTEGER NOT NULL DEFAULT 0
             )",
             [],
         )?;
@@ -145,6 +147,8 @@ impl FileRepository for Db {
                 size: row.get(5)?,
                 last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
                 created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
+                is_indexed: row.get(8)?,
+                content_indexed: row.get(9)?
             })
         })?
         .collect::<SqliteResult<Vec<_>>>()?;
@@ -169,11 +173,35 @@ impl FileRepository for Db {
                 row.get::<_, i64>(2)?
             ))
         })?;
+
+        // Indexation des fichiers
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 1")?;
+        let indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
+
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 0")?;
+        let unindexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
+
+        let percentage = (indexed_files as f64 / (indexed_files + unindexed_files) as f64) * 100.0;
+
+        // Indexation du contenu
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 1")?;
+        let content_indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
+
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 0")?;
+        let uncontent_indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
+
+        let content_indexed_percentage = (content_indexed_files as f64 / (content_indexed_files + uncontent_indexed_files) as f64) * 100.0;
         
         Ok(Stat { 
             nb_files: result.0 as u32, 
             nb_folders: result.1 as u32, 
-            total_size: result.2 as u64 
+            total_size: result.2 as u64,
+            indexed_files: indexed_files as u32,
+            unindexed_files: unindexed_files as u32,
+            indexed_percentage: percentage,
+            content_indexed_files: content_indexed_files as u32,
+            uncontent_indexed_files: uncontent_indexed_files as u32,
+            content_indexed_percentage: content_indexed_percentage
         })
     }
 
@@ -303,7 +331,7 @@ impl Db {
 
         let tx = self.conn.transaction()?;
         
-        let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")?;
+        let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at, is_indexed, content_indexed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
 
         for file in &new_files {
             stmt.execute(rusqlite::params![
@@ -313,7 +341,9 @@ impl Db {
                 file.file_type, 
                 file.size, 
                 file.last_modified.duration_since(UNIX_EPOCH).unwrap().as_secs(), 
-                file.created_at.duration_since(UNIX_EPOCH).unwrap().as_secs()
+                file.created_at.duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                file.is_indexed,
+                file.content_indexed
             ])?;
         }
 

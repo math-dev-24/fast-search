@@ -81,6 +81,8 @@ fn process_entry(entry: &walkdir::DirEntry) -> Option<File> {
             size: Some(0),
             last_modified,
             created_at,
+            is_indexed: true,
+            content_indexed: true,
         })
     } else {
         let file_type = extract_file_type(path);
@@ -93,6 +95,8 @@ fn process_entry(entry: &walkdir::DirEntry) -> Option<File> {
             size: Some(metadata.len()),
             last_modified,
             created_at,
+            is_indexed: true,
+            content_indexed: false,
         })
     }
 }

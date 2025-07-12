@@ -96,6 +96,24 @@
                                 </div>
                             </template>
                         </NSwitch>
+                        <NSwitch v-model:value="modelValue.searchInContent">
+                            <template #checked>
+                                <div class="flex items-center space-x-2">
+                                    <NIcon size="16" class="text-green-600">
+                                        <DocumentText />
+                                    </NIcon>
+                                    <span class="text-sm font-medium">Recherche dans le contenu</span>
+                                </div>
+                            </template>
+                            <template #unchecked>
+                                <div class="flex items-center space-x-2">
+                                    <NIcon size="16" class="text-gray-600">
+                                        <Document />
+                                    </NIcon>
+                                    <span class="text-sm font-medium">Recherche dans les métadonnées</span>
+                                </div>
+                            </template>
+                        </NSwitch>
                     </NSpace>
 
                     <div class="w-full grid grid-cols-3">
@@ -129,7 +147,7 @@
 import { ref, onMounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { NInput, NButton, NIcon, NSelect, type SelectOption, NSwitch, NSpace, NInputNumber, NDatePicker } from 'naive-ui';
-import { Search, SyncCircleOutline, Refresh, Folder, Document, RefreshCircle } from '@vicons/ionicons5';
+import { Search, SyncCircleOutline, Refresh, Folder, Document, RefreshCircle, DocumentText } from '@vicons/ionicons5';
 import { useDebounceFn } from '@vueuse/core';
 import { useDate } from '../composables/useDate';
 
@@ -144,6 +162,8 @@ const modelValue = defineModel<{
     dateMode: 'create' | 'modify';
     sizeLimit: [number, number];
     dateRange: [number, number];
+    searchInContent: boolean;
+    contentSearchLimit: number;
 }>({
     required: true
 });

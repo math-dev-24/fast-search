@@ -12,13 +12,8 @@
                     <NStatistic label="Dossiers" :value="searchStore.filterResult.filter(file => file.is_dir).length" />
                 </NSpace>
             </NCard>
-            
-            <!-- Filtres -->
             <Filter v-model="searchStore" />
-            
-            <!-- Résultats avec design unifié -->
             <div v-if="searchStore.filterResult.length > 0" class="mt-4">
-                <!-- Section Dossiers -->
                 <div v-if="searchStore.filterResult.filter(file => file.is_dir).length > 0" class="mb-8">
                     <NText class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2" depth="3">
                         Dossiers ({{ searchStore.filterResult.filter(file => file.is_dir).length }})

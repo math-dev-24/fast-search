@@ -19,6 +19,8 @@ type SearchState = {
     showPath: boolean;
     searchInPath: boolean;
     autoSubmit: boolean;
+    searchInContent: boolean;
+    contentSearchLimit: number;
 }
 
 export const useSearchStore = defineStore('search', {
@@ -36,7 +38,9 @@ export const useSearchStore = defineStore('search', {
         showPath: true,
         searchInPath: false,
         result: [],
-        autoSubmit: true
+        autoSubmit: true,
+        searchInContent: false,
+        contentSearchLimit: 1000
     }),
 
     getters: {
@@ -66,21 +70,47 @@ export const useSearchStore = defineStore('search', {
             this.inLoading = true;
             this.isLoaded = false;
             try {
-
-                this.result = await invoke('search_files', {
-                    search: this.search,
-                    types: this.types,
-                    isDir: this.isDir,
-                    folders: this.folders,
-                    sizeLimit: this.sizeLimit,
-                    dateRange: this.dateRange,
-                    dateMode: this.dateMode
-                });
+                if (this.searchInContent) {
+                    // Recherche dans le contenu
+                    this.result = await invoke('search_content', {
+                        query: this.search,
+                        limit: this.contentSearchLimit
+                    });
+                } else {
+                    // Recherche dans les métadonnées (comportement existant)
+                    this.result = await invoke('search_files', {
+                        search: this.search,
+                        types: this.types,
+                        isDir: this.isDir,
+                        folders: this.folders,
+                        sizeLimit: this.sizeLimit,
+                        dateRange: this.dateRange,
+                        dateMode: this.dateMode
+                    });
+                }
                 this.isLoaded = true;
             } catch (error) {
                 console.error(error);
             } finally {
                 this.inLoading = false;
+            }
+        },
+
+        async getIndexStats() {
+            try {
+                const stats = await invoke('get_index_stats');
+                return stats;
+            } catch (error) {
+                console.error('Erreur récupération stats indexation:', error);
+                return null;
+            }
+        },
+
+        async startIndexation() {
+            try {
+                await invoke('index_files');
+            } catch (error) {
+                console.error('Erreur démarrage indexation:', error);
             }
         },
 

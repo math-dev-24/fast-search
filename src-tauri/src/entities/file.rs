@@ -10,4 +10,6 @@ pub struct File {
     pub size: Option<u64>,
     pub last_modified: SystemTime,
     pub created_at: SystemTime,
+    pub is_indexed: bool,
+    pub content_indexed: bool,
 }

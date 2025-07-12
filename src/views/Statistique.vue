@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { Stat } from '../types';
 import { onMounted, ref } from 'vue';
 import { NIcon, NSpace, useMessage, NButton, NButtonGroup } from 'naive-ui';
-import { FileTrayFull, FolderOpen, CloudUpload, SyncCircle, Refresh } from '@vicons/ionicons5';
+import { FileTrayFull, FolderOpen, CloudUpload, SyncCircle, Refresh, TextOutline } from '@vicons/ionicons5';
 import { formatSize } from '../shared/sieFormat';
 
 const stat = ref<Stat | null>(null);
@@ -32,6 +32,12 @@ const getStat = async () => {
             nb_files: 0,
             nb_folders: 0,
             total_size: 0,
+            indexed_files: 0,
+            unindexed_files: 0,
+            indexed_percentage: 0.0,
+            content_indexed_files: 0,
+            uncontent_indexed_files: 0,
+            content_indexed_percentage: 0.0
         }
 
     } finally {
@@ -55,7 +61,7 @@ const resetData = async () => {
 
 <template>
     <NSpace v-if="stat" vertical class="py-14 px-2 container mx-auto">
-        <NButtonGroup class="mt-2 mb-10">
+        <NButtonGroup class="my-2">
             <NButton @click="getStat" :loading="inLoading" tertiary type="primary">
                 <template #icon>
                     <NIcon>
@@ -64,13 +70,13 @@ const resetData = async () => {
                 </template>
                 Actualiser
             </NButton>
-            <NButton @click="resetData" tertiary type="warning">
+            <NButton @click="resetData" tertiary type="error">
                 <template #icon>
                     <NIcon>
                         <Refresh /> 
                     </NIcon>
                 </template>
-                Reset
+                Réinitialiser (Suppression des données)
             </NButton>
         </NButtonGroup>
 
@@ -83,10 +89,10 @@ const resetData = async () => {
                 <div class="text-sm text-gray-600">Fichiers</div>
             </NSpace>
             <NSpace vertical align="center">
-                <NIcon size="35" class="text-green-600">
+                <NIcon size="35" class="text-stone-500">
                     <FolderOpen />
                 </NIcon>
-                <div class="text-2xl font-bold text-green-600">{{ stat.nb_folders }}</div>
+                <div class="text-2xl font-bold text-stone-500">{{ stat.nb_folders }}</div>
                 <div class="text-sm text-gray-600">Dossiers</div>
             </NSpace>
             <NSpace vertical align="center">
@@ -95,6 +101,52 @@ const resetData = async () => {
                 </NIcon>
                 <div class="text-2xl font-bold text-purple-600">{{ formatSize(stat.total_size) }}</div>
                 <div class="text-sm text-gray-600">Taille totale</div>
+            </NSpace>
+        </NSpace>
+        <NSpace justify="space-around" align="center" class="border rounded-lg px-2 py-10 border-gray-700">
+            <NSpace vertical align="center">
+                <NIcon size="35" class="text-green-600">
+                    <FileTrayFull />
+                </NIcon>
+                <div class="text-2xl font-bold text-green-600">{{ stat.indexed_files }}</div>
+                <div class="text-sm text-gray-600">Fichiers indexés</div>
+            </NSpace>
+            <NSpace vertical align="center">
+                <NIcon size="35" class="text-yellow-600">
+                    <FileTrayFull />
+                </NIcon>
+                <div class="text-2xl font-bold text-yellow-600">{{ stat.unindexed_files }}</div>
+                <div class="text-sm text-gray-600">Fichiers non indexés</div>
+            </NSpace>
+            <NSpace vertical align="center">
+                <NIcon size="35" class="text-red-600">
+                    <FolderOpen />
+                </NIcon>
+                <div class="text-2xl font-bold text-red-600">{{ stat.indexed_percentage.toFixed(2) }}%</div>
+                <div class="text-sm text-gray-600">Fichiers indexés</div>
+            </NSpace>
+        </NSpace>
+        <NSpace justify="space-around" align="center" class="border rounded-lg px-2 py-10 border-gray-700">
+            <NSpace vertical align="center">
+                <NIcon size="35" class="text-green-600">
+                    <FileTrayFull />
+                </NIcon>
+                <div class="text-2xl font-bold text-green-600">{{ stat.content_indexed_files }}</div>
+                <div class="text-sm text-gray-600">Contenu indexé</div>
+            </NSpace>
+            <NSpace vertical align="center">
+                <NIcon size="35" class="text-yellow-600">
+                    <FileTrayFull />
+                </NIcon>
+                <div class="text-2xl font-bold text-yellow-600">{{ stat.uncontent_indexed_files }}</div>
+                <div class="text-sm text-gray-600">Contenu non indexés</div>
+            </NSpace>
+            <NSpace vertical align="center">
+                <NIcon size="35" class="text-red-600">
+                    <TextOutline />
+                </NIcon>
+                <div class="text-2xl font-bold text-red-600">{{ stat.content_indexed_percentage.toFixed(2) }}%</div>
+                <div class="text-sm text-gray-600">Contenu indexé</div>
             </NSpace>
         </NSpace>
     </NSpace>
