@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
-import { NSpace, NButton, NIcon, NProgress, NPopover, NText, NAlert } from 'naive-ui';
+import { NSpace, NButton, NIcon, NPopover } from 'naive-ui';
 import { RouterLink } from 'vue-router';
 import Setting from './Setting.vue';
+import SyncDetails from './SyncDetails.vue';
+import SyncIndicator from './SyncIndicator.vue';
 import { useSync } from '../composables/useSync';
 
 const router = useRouter();
@@ -10,14 +12,14 @@ const routes = router.getRoutes();
 
 const { 
     inSync, 
-    syncMessage, 
-    syncError, 
-    syncSuccess, 
-    startSync, 
-    valueProgress, 
+    hasError,
+    hasSuccess,
+    overallProgress, 
     progressStatus, 
     statusIcon, 
-    progressText 
+    syncSummary,
+    processDetails,
+    startSync
 } = useSync();
 </script>
 
@@ -35,8 +37,8 @@ const {
                     </NButton>
                 </RouterLink>
                 
-                <!-- Bouton de sync avec popover d'info -->
-                <NPopover trigger="hover" :disabled="!inSync && !syncError && !syncSuccess">
+                <!-- Bouton de sync avec popover d'info détaillé -->
+                <NPopover trigger="hover" :disabled="!inSync && !hasError && !hasSuccess" placement="bottom-end">
                     <template #trigger>
                         <NButton 
                             @click="startSync" 
@@ -54,57 +56,32 @@ const {
                             Sync
                         </NButton>
                     </template>
-                    <div class="max-w-xs">
-                        <NText v-if="syncError" type="error">
-                            {{ syncError }}
-                        </NText>
-                        <NText v-else-if="syncSuccess" type="success">
-                            {{ syncMessage }}
-                        </NText>
-                        <div v-else-if="inSync">
-                            <NText>{{ progressText }}</NText>
-                            <div class="mt-2">
-                                <NText depth="3" class="text-xs">
-                                    {{ Math.round(valueProgress) }}% terminé
-                                </NText>
-                            </div>
-                        </div>
-                    </div>
+                    
+                    <!-- Utilisation du composant SyncDetails -->
+                    <SyncDetails
+                        :inSync="inSync"
+                        :hasError="hasError.length > 0"
+                        :hasSuccess="hasSuccess"
+                        :overallProgress="overallProgress"
+                        :progressStatus="progressStatus"
+                        :syncSummary="syncSummary"
+                        :processDetails="processDetails"
+                        :statusIcon="statusIcon"
+                    />
                 </NPopover>
 
                 <Setting :inSync="inSync" />
             </NSpace>
         </NSpace>
         
-        <!-- Barre de progression avec couleur selon l'état -->
-        <NProgress 
-            v-show="inSync || syncError || syncSuccess" 
-            type="line" 
-            :percentage="valueProgress" 
-            :show-indicator="false" 
-            :show-text="false" 
-            :height="2"
-            :status="progressStatus"
+        <!-- Indicateur de synchronisation -->
+        <SyncIndicator
+            :inSync="inSync"
+            :hasError="hasError.length > 0"
+            :hasSuccess="hasSuccess"
+            :overallProgress="overallProgress"
+            :progressStatus="progressStatus"
+            :syncSummary="syncSummary"
         />
-        
-        <!-- Message d'état visible -->
-        <div v-if="(inSync || syncError || syncSuccess) && progressText" 
-             class="px-8 py-1 text-xs text-gray-600 bg-gray-800 border-b">
-            <NText :type="progressStatus" class="truncate">
-                {{ progressText }}
-            </NText>
-        </div>
-        
-        <!-- Alerte d'erreur -->
-        <NAlert 
-            v-if="syncError" 
-            type="error" 
-            :show-icon="true"
-            closable
-            @close="syncError = ''"
-            class="mx-8 mt-2"
-        >
-            {{ syncError }}
-        </NAlert>
     </header>
 </template>

@@ -5,11 +5,17 @@
         <template v-if="searchStore.isLoaded">
             <NCard class="mb-4">
                 <NSpace justify="space-around" align="center">
-                    <NStatistic label="Résultats" :value="searchStore.filterResult.length" />
+                    <NStatistic label="Résultats">
+                        <NNumberAnimation :from="0" :to="searchStore.filterResult.length" :duration="1000" />
+                    </NStatistic>
                     <NDivider vertical />
-                    <NStatistic label="Fichiers" :value="searchStore.filterResult.filter(file => !file.is_dir).length" />
+                    <NStatistic label="Fichiers">
+                        <NNumberAnimation :from="0" :to="searchStore.filterResult.filter(file => !file.is_dir).length" :duration="1000" />
+                    </NStatistic>
                     <NDivider vertical />
-                    <NStatistic label="Dossiers" :value="searchStore.filterResult.filter(file => file.is_dir).length" />
+                    <NStatistic label="Dossiers">
+                        <NNumberAnimation :from="0" :to="searchStore.filterResult.filter(file => file.is_dir).length" :duration="1000" />
+                    </NStatistic>
                 </NSpace>
             </NCard>
             <Filter v-model="searchStore" />
@@ -71,7 +77,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NSpace, NGrid, NGi, NDivider, NStatistic, NCard, NText, NEmpty, NButton } from 'naive-ui';
+import { NSpace, NGrid, NGi, NDivider, NStatistic, NCard, NText, NEmpty, NButton, NNumberAnimation } from 'naive-ui';
 import Search from '../components/Search.vue';
 import CardFile from '../components/CardFile.vue';
 import CardFolder from '../components/CardFolder.vue';

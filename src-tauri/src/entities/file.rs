@@ -12,4 +12,6 @@ pub struct File {
     pub created_at: SystemTime,
     pub is_indexed: bool,
     pub content_indexed: bool,
+    pub is_indexable: bool,
+    pub content_hash: Option<String>,
 }

@@ -6,4 +6,8 @@ export interface File {
     size: number | null;
     last_modified: string | null;
     created_at: string | null;
+    is_indexed: boolean;
+    content_indexed: boolean;
+    is_indexable: boolean;
+    content_hash: string | null;
 }

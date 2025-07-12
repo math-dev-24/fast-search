@@ -27,3 +27,6 @@ rusqlite = { version = "0.37.0", features = ["bundled"] }
 walkdir = "2.3.2"
 chrono = "0.4.27"
 rayon = "1.10.0"
+sha2 = "0.10"
+tokio = { version = "1.0", features = ["full"] }
+lopdf = "0.36"

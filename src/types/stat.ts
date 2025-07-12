@@ -8,4 +8,5 @@ export interface Stat {
     content_indexed_files: number;
     uncontent_indexed_files: number;
     content_indexed_percentage: number;
+    unindexable_files: number;
 }

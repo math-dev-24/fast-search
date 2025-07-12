@@ -17,8 +17,8 @@ impl<T: FileRepository> FileService<T> {
         self.repository.init().map_err(|e| e.to_string())
     }
 
-    pub fn search(&self, query: &str, file_types: &[String], is_dir: bool, folders: &[String], size_limit: &[usize], date_range: &[usize], date_mode: &str) -> Result<Vec<File>, String> {
-        self.repository.search(query, file_types, is_dir, folders, size_limit, date_range, date_mode).map_err(|e| e.to_string())
+    pub fn search(&self, query: &str, file_types: &[String], is_dir: bool, folders: &[String], size_limit: &[usize], date_range: &[usize], date_mode: &str, in_content: bool) -> Result<Vec<File>, String> {
+        self.repository.search(query, file_types, is_dir, folders, size_limit, date_range, date_mode, in_content).map_err(|e| e.to_string())
     }
 
     pub fn get_stat(&self) -> Result<Stat, String> {
@@ -47,6 +47,14 @@ impl<T: FileRepository> FileService<T> {
 
     pub fn insert_paths(&mut self, paths: Vec<String>) -> Result<(), String> {
         self.repository.insert_paths(paths).map_err(|e| e.to_string())
+    }
+
+    pub fn get_uncontent_indexed_files(&self) -> Result<Vec<File>, String> {
+        self.repository.get_uncontent_indexed_files().map_err(|e| e.to_string())
+    }
+
+    pub fn update_file_index_status(&mut self, file: &File, content_hash: String, is_indexable: bool) -> Result<(), String> {
+        self.repository.update_file_index_status(file, content_hash, is_indexable).map_err(|e| e.to_string())
     }
 
 }

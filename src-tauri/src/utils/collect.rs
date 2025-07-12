@@ -16,8 +16,8 @@ where F: Fn(usize, &str) + Send + Sync + Clone
 
     // Première phase: collecte des entrées (séquentielle)
     let entries: Vec<_> = WalkDir::new(base_path)
-        .follow_links(false)
-        .max_depth(50) // Limite raisonnable
+        .follow_links(true)
+        .max_depth(100) 
         .into_iter()
         .filter_map(|e| match e {
             Ok(entry) => Some(entry),
@@ -30,6 +30,9 @@ where F: Fn(usize, &str) + Send + Sync + Clone
         .collect();
 
     let total = entries.len();
+
+    println!("[DEBUG] Base path: {}. Trouvé {} entrées", base_path.display(), total);
+
     let processed = Arc::new(AtomicUsize::new(0));
     
     // Callback initial
@@ -51,7 +54,6 @@ where F: Fn(usize, &str) + Send + Sync + Clone
         })
         .collect();
 
-    // Callback final
     progress_callback(total, "Indexation terminée");
     files
 }
@@ -71,8 +73,11 @@ fn process_entry(entry: &walkdir::DirEntry) -> Option<File> {
     let metadata = entry.metadata().ok()?;
     let last_modified = metadata.modified().unwrap_or_else(|_| SystemTime::now());
     let created_at = metadata.created().unwrap_or_else(|_| SystemTime::now());
+
+
     
     if path.is_dir() {
+        println!("[DEBUG] Process entry: {} is a directory", path.display());
         Some(File {
             path: path.to_path_buf(),
             name: file_name.to_string(),
@@ -83,10 +88,12 @@ fn process_entry(entry: &walkdir::DirEntry) -> Option<File> {
             created_at,
             is_indexed: true,
             content_indexed: true,
+            content_hash: None,
+            is_indexable: true
         })
     } else {
         let file_type = extract_file_type(path);
-        
+        println!("[DEBUG] Process entry: {} is a file. File type: {}", path.display(), file_type);
         Some(File {
             path: path.to_path_buf(),
             name: file_name.to_string(),
@@ -97,6 +104,8 @@ fn process_entry(entry: &walkdir::DirEntry) -> Option<File> {
             created_at,
             is_indexed: true,
             content_indexed: false,
+            content_hash: None,
+            is_indexable: true
         })
     }
 }
@@ -105,27 +114,43 @@ fn should_skip_entry(entry: &walkdir::DirEntry) -> bool {
     let path_str = entry.path().to_string_lossy();
     let file_name = entry.file_name().to_string_lossy();
     
-    // Dossiers système Windows
-    path_str.contains("$RECYCLE.BIN") ||
-    path_str.contains("System Volume Information") ||
-    path_str.contains("Windows\\System32") ||
-    path_str.contains("AppData\\Local\\Temp") ||
-    path_str.contains("ProgramData\\Microsoft") ||
+    // Filtrage plus permissif - seulement les dossiers système critiques
+    let should_skip = 
+        // Dossiers système macOS critiques uniquement
+        path_str.contains("/System/") ||
+        path_str.contains("/private/") ||
+        path_str.contains(".Trashes") ||
+        path_str.contains(".fseventsd") ||
+        path_str.contains(".TemporaryItems") ||
+        
+        // Dossiers système Windows critiques uniquement
+        path_str.contains("$RECYCLE.BIN") ||
+        path_str.contains("System Volume Information") ||
+        path_str.contains("Windows\\System32\\") ||
+        path_str.contains("AppData\\Local\\Temp\\") ||
+        
+        // Dossiers système Unix/Linux critiques uniquement
+        path_str.contains("/proc/") ||
+        path_str.contains("/sys/") ||
+        
+        // Dossiers de développement volumineux
+        path_str.contains("/node_modules/") ||
+        path_str.contains(".git/") ||
+        path_str.contains(".vscode/") ||
+        path_str.contains(".idea/") ||
+        path_str.contains("/dist/") ||
+        path_str.contains("/build/") ||
+        path_str.contains("/target/") ||
+        path_str.contains("/tmp/") ||
+        path_str.contains("/var/") ||
+        path_str.contains("/private/") ||
+
+        // Fichiers temporaires système uniquement
+        file_name.ends_with(".tmp") ||
+        file_name.ends_with(".temp") ||
+        file_name.starts_with("~$") ||
+        file_name.ends_with(".DS_Store");
+
     
-    // Dossiers système Unix/Linux
-    file_name.starts_with('.') ||
-    path_str.contains("/proc/") ||
-    path_str.contains("/sys/") ||
-    path_str.contains("/dev/") ||
-    
-    // Dossiers temporaires communs
-    path_str.contains("node_modules") ||
-    path_str.contains(".git") ||
-    path_str.contains("target/debug") ||
-    path_str.contains("target/release") ||
-    
-    // Fichiers temporaires
-    file_name.ends_with(".tmp") ||
-    file_name.ends_with(".temp") ||
-    file_name.starts_with("~$")
+    should_skip
 }

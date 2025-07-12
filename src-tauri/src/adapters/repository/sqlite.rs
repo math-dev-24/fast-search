@@ -30,7 +30,9 @@ impl FileRepository for Db {
                 last_modified INTEGER,
                 created_at INTEGER,
                 is_indexed INTEGER NOT NULL DEFAULT 0,
-                content_indexed INTEGER NOT NULL DEFAULT 0
+                content_indexed INTEGER NOT NULL DEFAULT 0,
+                is_indexable INTEGER NOT NULL DEFAULT 1,
+                content_hash TEXT
             )",
             [],
         )?;
@@ -62,7 +64,18 @@ impl FileRepository for Db {
         Ok(())
     }
 
-    fn search(&self, query: &str, file_types: &[String], is_dir: bool, folders: &[String], size_limit: &[usize], date_range: &[usize], date_mode: &str) -> SqliteResult<Vec<File>> {
+    fn search(
+        &self, 
+        query: &str, 
+        file_types: &[String], 
+        is_dir: bool, 
+        folders: &[String], 
+        size_limit: &[usize], 
+        date_range: &[usize], 
+        date_mode: &str, 
+        in_content: bool
+    ) -> SqliteResult<Vec<File>> 
+    {
        
         let mut conditions = Vec::new();
         let mut params = Vec::new();
@@ -85,6 +98,13 @@ impl FileRepository for Db {
             conditions.push("size >= ? AND size <= ?");
             params.push(min.to_string());
             params.push(max.to_string());
+        }
+
+        if in_content {
+            conditions.push("content_indexed = 1");
+            conditions.push("content_hash IS NOT NULL");
+            conditions.push("content_hash LIKE ?");
+            params.push(format!("%{}%", query));
         }
 
         if date_range.len() >= 2 && (date_range[0] > 0 || date_range[1] > 0) {
@@ -130,9 +150,8 @@ impl FileRepository for Db {
             conditions.join(" AND ")
         };
         
-        // Optimisation: LIMIT pour éviter de charger trop de données
         let sql_query = format!(
-            "SELECT * FROM files WHERE {} ORDER BY name COLLATE NOCASE LIMIT 1000",
+            "SELECT * FROM files WHERE {} ORDER BY name COLLATE NOCASE LIMIT 10000",
             where_clause
         );
         
@@ -148,7 +167,9 @@ impl FileRepository for Db {
                 last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
                 created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
                 is_indexed: row.get(8)?,
-                content_indexed: row.get(9)?
+                content_indexed: row.get(9)?,
+                is_indexable: row.get(10)?,
+                content_hash: row.get(11)?
             })
         })?
         .collect::<SqliteResult<Vec<_>>>()?;
@@ -175,33 +196,38 @@ impl FileRepository for Db {
         })?;
 
         // Indexation des fichiers
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 1")?;
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 1 AND is_indexable = 1")?;
         let indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
 
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 0")?;
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 0 AND is_indexable = 1")?;
         let unindexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
 
-        let percentage = (indexed_files as f64 / (indexed_files + unindexed_files) as f64) * 100.0;
+        let indexed_percentage = (indexed_files as f64 / (indexed_files + unindexed_files) as f64) * 100.0;
 
         // Indexation du contenu
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 1")?;
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexable = 0")?;
+        let unindexable_files: i64 = stmt.query_row([], |row| row.get(0))?;
+
+
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 1 AND is_indexable = 1")?;
         let content_indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
 
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 0")?;
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 0 AND is_indexable = 1")?;
         let uncontent_indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
 
-        let content_indexed_percentage = (content_indexed_files as f64 / (content_indexed_files + uncontent_indexed_files) as f64) * 100.0;
-        
+        let content_indexed_percentage = (content_indexed_files as f64 / (content_indexed_files + uncontent_indexed_files + unindexable_files) as f64) * 100.0;
+
         Ok(Stat { 
             nb_files: result.0 as u32, 
             nb_folders: result.1 as u32, 
             total_size: result.2 as u64,
             indexed_files: indexed_files as u32,
             unindexed_files: unindexed_files as u32,
-            indexed_percentage: percentage,
+            indexed_percentage: indexed_percentage as f64,
             content_indexed_files: content_indexed_files as u32,
             uncontent_indexed_files: uncontent_indexed_files as u32,
-            content_indexed_percentage: content_indexed_percentage
+            content_indexed_percentage: content_indexed_percentage as f64,
+            unindexable_files: unindexable_files as u32
         })
     }
 
@@ -226,6 +252,8 @@ impl FileRepository for Db {
 
     fn reset_data(&self) -> SqliteResult<()> {
         self.conn.execute("DELETE FROM files", [])?;
+        self.conn.execute("DELETE FROM types", [])?;
+        self.conn.execute("DELETE FROM paths", [])?;
         Ok(())
     }
 
@@ -249,24 +277,43 @@ impl FileRepository for Db {
 
     fn insert_paths(&mut self, paths: Vec<String>) -> SqliteResult<()> {
 
-        let mut new_paths = HashSet::new();
-
-        for path in paths {
-            if !self.path_exist(&path).unwrap_or(false) {
-                new_paths.insert(path);
-            }
-        }
-
-        if new_paths.is_empty() {
-            return Ok(());
-        }
-
         let tx = self.conn.transaction()?;
 
-        for path in new_paths {
+        tx.execute("DELETE FROM paths", [])?;
+
+        for path in paths {
             tx.execute("INSERT INTO paths (path) VALUES (?)", [path])?;
         }
         tx.commit()?;
+        Ok(())
+    }
+
+    fn get_uncontent_indexed_files(&self) -> SqliteResult<Vec<File>> {
+        let mut stmt = self.conn.prepare("SELECT * FROM files WHERE content_indexed = 0 AND content_hash IS NULL AND is_indexable = 1")?;
+        let files: Vec<File> = stmt.query_map([], |row| {
+            Ok(File {
+                path: PathBuf::from(row.get::<_, String>(1)?),
+                name: row.get(2)?,
+                is_dir: row.get(3)?,
+                file_type: row.get(4)?,
+                size: row.get(5)?,
+                last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
+                created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
+                is_indexed: row.get(8)?,
+                content_indexed: row.get(9)?,
+                is_indexable: row.get(10)?,
+                content_hash: row.get(11)?
+            })
+        })?
+        .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(files)
+    }
+
+    fn update_file_index_status(&mut self, file: &File, content_hash: String, is_indexable: bool) -> SqliteResult<()> {
+        self.conn.execute(
+            "UPDATE files SET content_indexed = ?, content_hash = ?, is_indexable = ? WHERE path = ?", 
+            rusqlite::params![true, content_hash, is_indexable, file.path.to_str().unwrap()]
+        )?;
         Ok(())
     }
 }
@@ -283,12 +330,6 @@ impl Db {
     fn type_exist(&self, type_name: &str) -> SqliteResult<bool> {
         let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM types WHERE name = ? LIMIT 1)")?;
         let exists: i64 = stmt.query_row([type_name], |row| row.get(0))?;
-        Ok(exists > 0)
-    }
-
-    fn path_exist(&self, path: &str) -> SqliteResult<bool> {
-        let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM paths WHERE path = ? LIMIT 1)")?;
-        let exists: i64 = stmt.query_row([path], |row| row.get(0))?;
         Ok(exists > 0)
     }
 
@@ -331,7 +372,7 @@ impl Db {
 
         let tx = self.conn.transaction()?;
         
-        let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at, is_indexed, content_indexed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
+        let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at, is_indexed, content_indexed, is_indexable, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
 
         for file in &new_files {
             stmt.execute(rusqlite::params![
@@ -343,7 +384,9 @@ impl Db {
                 file.last_modified.duration_since(UNIX_EPOCH).unwrap().as_secs(), 
                 file.created_at.duration_since(UNIX_EPOCH).unwrap().as_secs(),
                 file.is_indexed,
-                file.content_indexed
+                file.content_indexed,
+                file.is_indexable,
+                file.content_hash
             ])?;
         }
 

@@ -6,7 +6,8 @@ mod ports;
 
 use entities::{file::File, stat::Stat};
 use tauri::{async_runtime, Manager};
-use utils::{generator::get_service_repository, scan::scan_files_async};
+use utils::{generator::get_service_repository, scan::scan_files_async, indexer::index_content_async};
+use services::content_indexer_service::ContentIndexerService;
 use std::env;
 use std::process::Command;
 
@@ -48,8 +49,8 @@ fn get_all_paths() -> Result<Vec<String>, String> {
 
 #[tauri::command]
 fn sync_files_and_folders(window: tauri::WebviewWindow) -> Result<(), String> {
-    let service_repository = get_service_repository().unwrap();
-    let paths = service_repository.get_all_paths().unwrap();
+    let service_repository = get_service_repository()?;
+    let paths = service_repository.get_all_paths()?;
     scan_files_async(window, paths);
     Ok(())
 }
@@ -59,9 +60,7 @@ fn reset_data() -> Result<(), String> {
     let service_repository = get_service_repository()?;
     service_repository.reset_data()?;
     Ok(())
-}   
-
-
+}
 
 #[tauri::command]
 fn save_paths(paths: Vec<String>, window: tauri::WebviewWindow) -> Result<(), String> {
@@ -70,14 +69,10 @@ fn save_paths(paths: Vec<String>, window: tauri::WebviewWindow) -> Result<(), St
 
     service_repository.insert_paths(paths.clone())?;
 
-
-    let mut new_paths: Vec<String> = Vec::new();
-
-    for path in paths {
-        if !current_paths.contains(&path) {
-            new_paths.push(path);
-        }
-    }
+    let new_paths: Vec<String> = paths
+        .into_iter()
+        .filter(|path| !current_paths.contains(path))
+        .collect();
 
     if !new_paths.is_empty() {
         scan_files_async(window, new_paths);
@@ -94,7 +89,8 @@ fn search_files(
     folders: Option<Vec<String>>, 
     size_limit: Vec<usize>, 
     date_range: Vec<usize>,
-    date_mode: String
+    date_mode: String,
+    in_content: bool
 ) -> Result<Vec<File>, String> {
         
     let types_vec = types.unwrap_or_default();
@@ -102,8 +98,20 @@ fn search_files(
     
     let service_repository = get_service_repository()?;
 
-    let files = service_repository.search(&search, &types_vec, is_dir, &folders_vec, &size_limit, &date_range, &date_mode)?;
+    let files = service_repository.search(&search, &types_vec, is_dir, &folders_vec, &size_limit, &date_range, &date_mode, in_content)?;
     Ok(files)
+}
+
+#[tauri::command]
+fn start_content_indexing(window: tauri::WebviewWindow) -> Result<(), String> {
+    index_content_async(window);
+    Ok(())
+}
+
+#[tauri::command]
+fn get_supported_extensions() -> Result<Vec<String>, String> {
+    let content_indexer = ContentIndexerService::new();
+    Ok(content_indexer.get_supported_extensions())
 }
 
 #[tauri::command]
@@ -153,8 +161,10 @@ fn open_file_in_explorer(path: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let service_repository = get_service_repository().unwrap();
-    service_repository.init().unwrap();
+    let service_repository = get_service_repository()
+        .expect("Failed to initialize service repository");
+    service_repository.init()
+        .expect("Failed to initialize database");
 
     let builder = tauri::Builder::default();
     let builder = builder.plugin(tauri_plugin_opener::init());
@@ -164,6 +174,8 @@ pub fn run() {
         sync_files_and_folders, 
         get_current_dir, 
         get_all_types, search_files, 
+        start_content_indexing,
+        get_supported_extensions,
         open_file_in_explorer, 
         reset_data, 
         get_all_folders,
@@ -171,12 +183,16 @@ pub fn run() {
         get_all_paths
     ])
     .setup(|app| {
-        let window = app.get_webview_window("main").unwrap();
+        let window = app.get_webview_window("main")
+            .expect("Failed to get main window");
     
         async_runtime::spawn(async move {
-            let service_repository = get_service_repository().unwrap();
-            let paths = service_repository.get_all_paths().unwrap();
-            scan_files_async(window, paths);
+            if let Ok(service_repository) = get_service_repository() {
+                if let Ok(paths) = service_repository.get_all_paths() {
+                    scan_files_async(window.clone(), paths);
+                    index_content_async(window);
+                }
+            }
         });
         
         Ok(())

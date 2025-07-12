@@ -1,169 +1,408 @@
 import { ref, onMounted, onUnmounted, computed } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";  
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { AlertCircle, CheckmarkCircle, SyncCircle } from "@vicons/ionicons5";
+import { AlertCircle, CheckmarkCircle, SyncCircle, FolderOutline, DocumentTextOutline } from "@vicons/ionicons5";
+import { Phase } from "../types";
+
+// Constantes pour les événements (cohérentes avec le backend)
+const EVENTS = {
+  SCAN: {
+    STARTED: "scan_files_started",
+    PROGRESS: "scan_files_progress",
+    COLLECTED: "scan_files_collected",
+    INSERT_PROGRESS: "scan_files_insert_progress",
+    FINISHED: "scan_files_finished",
+    ERROR: "scan_files_error"
+  },
+  INDEX: {
+    STARTED: "index_content_started",
+    PROGRESS: "index_content_progress",
+    FINISHED: "index_content_finished",
+    ERROR: "index_content_error"
+  },
+  STAT: {
+    UPDATED: "stat_updated"
+  }
+} as const;
+
+// Types pour les payloads d'événements
+interface ScanProgressPayload {
+  progress: number;
+  message: string;
+  current_path: string;
+}
+
+interface ScanCollectedPayload {
+  total: number;
+  message: string;
+}
+
+interface InsertProgressPayload {
+  progress: number;
+  processed: number;
+  total: number;
+}
+
+interface ScanFinishedPayload {
+  total: number;
+  message: string;
+}
+
+interface IndexProgressPayload {
+  progress: number;
+  message: string;
+  processed: number;
+  total: number;
+}
+
+interface IndexFinishedPayload {
+  total: number;
+  message: string;
+}
+
+interface ProcessState {
+  isActive: boolean;
+  progress: number;
+  message: string;
+  currentPath: string;
+  total: number;
+  processed: number;
+  phase: Phase;
+  error: string;
+  success: boolean;
+}
 
 export const useSync = () => {
-  const inSync = ref<boolean>(false);
-  const syncProgress = ref<number>(0);
-  const syncMessage = ref<string>("");
-  const currentPath = ref<string>("");
-  const totalFiles = ref<number>(0);
-  const processedFiles = ref<number>(0);
-  const syncError = ref<string>("");
-  const syncSuccess = ref<boolean>(false);
-  const scanPhase = ref<"collecting" | "inserting" | "finished" | "error">(
-    "collecting"
-  );
-
-  const listeners: UnlistenFn[] = [];
-
-  const startSync = async () => {
-    try {
-      inSync.value = true;
-      syncProgress.value = 0;
-      syncMessage.value = "Initialisation...";
-      syncError.value = "";
-      syncSuccess.value = false;
-      scanPhase.value = "collecting";
-
-      await invoke("sync_files_and_folders");
-    } catch (error) {
-      syncError.value = `Erreur lors du démarrage: ${error}`;
-      inSync.value = false;
-      scanPhase.value = "error";
-    }
-  };
-
-  const valueProgress = computed(() => {
-    return Math.round(syncProgress.value * 1000) / 10;
+  // États séparés pour chaque processus
+  const scanState = ref<ProcessState>({
+    isActive: false,
+    progress: 0,
+    message: "",
+    currentPath: "",
+    total: 0,
+    processed: 0,
+    phase: "collecting",
+    error: "",
+    success: false
   });
 
-  const progressStatus = computed(() => {
-    if (syncError.value) return "error";
-    if (syncSuccess.value) return "success";
+  const indexState = ref<ProcessState>({
+    isActive: false,
+    progress: 0,
+    message: "",
+    currentPath: "",
+    total: 0,
+    processed: 0,
+    phase: "collecting",
+    error: "",
+    success: false
+  });
+
+  const inSync = computed(() => {
+    return scanState.value.isActive || indexState.value.isActive;
+  });
+
+  const hasError = computed(() => {
+    return scanState.value.error || indexState.value.error;
+  });
+
+  const hasSuccess = computed(() => {
+    return scanState.value.success || indexState.value.success;
+  });
+
+  const overallProgress = computed(() => {
+    if (!inSync.value) return 0;
+    
+    const scanWeight = 0.5; // Le scan représente 50% du travail total
+    const indexWeight = 0.5; // L'indexation représente 50% du travail total
+    
+    const scanProgress = scanState.value.isActive ? scanState.value.progress : (scanState.value.success ? 100 : 0);
+    const indexProgress = indexState.value.isActive ? indexState.value.progress : (indexState.value.success ? 100 : 0);
+    
+    return Math.round((scanProgress * scanWeight + indexProgress * indexWeight) * 10) / 10;
+  });
+
+  const progressStatus = computed((): 'info' | 'success' | 'error' | 'warning' => {
+    if (hasError.value) return "error";
+    if (hasSuccess.value && !inSync.value) return "success";
     return "info";
   });
 
   const statusIcon = computed(() => {
-    if (syncError.value) return AlertCircle;
-    if (syncSuccess.value) return CheckmarkCircle;
+    if (hasError.value) return AlertCircle;
+    if (hasSuccess.value && !inSync.value) return CheckmarkCircle;
     return SyncCircle;
   });
 
-  const progressText = computed(() => {
-    if (syncError.value) return "Erreur";
-    if (syncSuccess.value) return "Terminé";
+  const syncSummary = computed(() => {
+    const activeProcesses = [];
+    if (scanState.value.isActive) activeProcesses.push("Scan");
+    if (indexState.value.isActive) activeProcesses.push("Indexation");
+    
+    if (activeProcesses.length === 0) {
+      if (hasError.value) return "Erreur de synchronisation";
+      if (hasSuccess.value) return "Synchronisation terminée";
+      return "";
+    }
+    
+    return `Synchronisation en cours (${activeProcesses.join(", ")})`;
+  });
 
-    switch (scanPhase.value) {
-      case "collecting":
-        return currentPath.value
-          ? `Collecte: ${
-              currentPath.value.split("/").pop() ||
-              currentPath.value.split("\\").pop()
-            }`
-          : "Collecte en cours...";
-      case "inserting":
-        return `Insertion: ${processedFiles.value}/${totalFiles.value}`;
-      case "finished":
-        return `Terminé: ${totalFiles.value} fichiers`;
-      default:
-        return syncMessage.value;
+  const processDetails = computed(() => {
+    const details = [];
+    
+    if (scanState.value.isActive || scanState.value.success) {
+      const scanDetail = {
+        name: "Scan des fichiers",
+        icon: FolderOutline,
+        isActive: scanState.value.isActive,
+        progress: scanState.value.progress,
+        message: scanState.value.message,
+        currentPath: scanState.value.currentPath,
+        phase: scanState.value.phase,
+        error: scanState.value.error,
+        success: scanState.value.success
+      };
+      details.push(scanDetail);
+    }
+    
+    if (indexState.value.isActive || indexState.value.success) {
+      const indexDetail = {
+        name: "Indexation du contenu",
+        icon: DocumentTextOutline,
+        isActive: indexState.value.isActive,
+        progress: indexState.value.progress,
+        message: indexState.value.message,
+        currentPath: indexState.value.currentPath,
+        phase: indexState.value.phase,
+        error: indexState.value.error,
+        success: indexState.value.success
+      };
+      details.push(indexDetail);
+    }
+    
+    return details;
+  });
+
+  const listeners: UnlistenFn[] = [];
+
+  // Fonction utilitaire pour gérer les erreurs d'événements
+  const handleEventError = (eventName: string, error: any) => {
+    console.error(`Erreur lors de l'écoute de l'événement ${eventName}:`, error);
+  };
+
+  // Fonction utilitaire pour reset un état de processus
+  const resetProcessState = (state: ProcessState, isActive: boolean = false) => {
+    state.isActive = isActive;
+    state.progress = 0;
+    state.message = "";
+    state.currentPath = "";
+    state.total = 0;
+    state.processed = 0;
+    state.phase = "collecting";
+    state.error = "";
+    state.success = false;
+  };
+
+  const startSync = async () => {
+    try {
+      // Reset des états
+      resetProcessState(scanState.value, true);
+      resetProcessState(indexState.value, true);
+      
+      scanState.value.message = "Initialisation du scan des fichiers...";
+      indexState.value.message = "Initialisation de l'indexation du contenu...";
+
+      await invoke("sync_files_and_folders");
+      await invoke("start_content_indexing");
+    } catch (error) {
+      const errorMsg = `Erreur lors du démarrage: ${error}`;
+      scanState.value.error = errorMsg;
+      indexState.value.error = errorMsg;
+      scanState.value.isActive = false;
+      indexState.value.isActive = false;
+    }
+  };
+
+  onMounted(async () => {
+    try {
+      // Événements pour le scan des fichiers
+      listeners.push(
+        await listen(EVENTS.SCAN.STARTED, () => {
+          resetProcessState(scanState.value, true);
+          scanState.value.message = "Démarrage du scan des fichiers...";
+        })
+      );
+
+      listeners.push(
+        await listen(EVENTS.SCAN.PROGRESS, (event: any) => {
+          try {
+            const payload = event.payload as ScanProgressPayload;
+            scanState.value.progress = payload.progress;
+            scanState.value.message = payload.message;
+            scanState.value.currentPath = payload.current_path;
+            scanState.value.phase = "collecting";
+          } catch (error) {
+            handleEventError(EVENTS.SCAN.PROGRESS, error);
+          }
+        })
+      );
+
+      listeners.push(
+        await listen(EVENTS.SCAN.COLLECTED, (event: any) => {
+          try {
+            const payload = event.payload as ScanCollectedPayload;
+            scanState.value.total = payload.total;
+            scanState.value.message = payload.message;
+            scanState.value.phase = "inserting";
+            scanState.value.progress = 0;
+          } catch (error) {
+            handleEventError(EVENTS.SCAN.COLLECTED, error);
+          }
+        })
+      );
+
+      listeners.push(
+        await listen(EVENTS.SCAN.INSERT_PROGRESS, (event: any) => {
+          try {
+            const payload = event.payload as InsertProgressPayload;
+            scanState.value.progress = payload.progress;
+            scanState.value.processed = payload.processed;
+            scanState.value.total = payload.total;
+            scanState.value.phase = "inserting";
+          } catch (error) {
+            handleEventError(EVENTS.SCAN.INSERT_PROGRESS, error);
+          }
+        })
+      );
+
+      listeners.push(
+        await listen(EVENTS.SCAN.FINISHED, (event: any) => {
+          try {
+            const payload = event.payload as ScanFinishedPayload;
+            scanState.value.isActive = false;
+            scanState.value.progress = 100;
+            scanState.value.message = payload.message;
+            scanState.value.total = payload.total;
+            scanState.value.phase = "finished";
+            scanState.value.success = true;
+
+            // Reset après 3 secondes
+            setTimeout(() => {
+              scanState.value.success = false;
+              scanState.value.progress = 0;
+            }, 3000);
+          } catch (error) {
+            handleEventError(EVENTS.SCAN.FINISHED, error);
+          }
+        })
+      );
+
+      listeners.push(
+        await listen(EVENTS.SCAN.ERROR, (event: any) => {
+          try {
+            scanState.value.isActive = false;
+            scanState.value.error = event.payload as string;
+            scanState.value.phase = "error";
+            scanState.value.progress = 0;
+
+            setTimeout(() => {
+              scanState.value.error = "";
+            }, 5000);
+          } catch (error) {
+            handleEventError(EVENTS.SCAN.ERROR, error);
+          }
+        })
+      );
+
+      // Événements pour l'indexation du contenu
+      listeners.push(
+        await listen(EVENTS.INDEX.STARTED, () => {
+          resetProcessState(indexState.value, true);
+          indexState.value.message = "Analyse des fichiers à indexer...";
+        })
+      );
+
+      listeners.push(
+        await listen(EVENTS.INDEX.PROGRESS, (event: any) => {
+          try {
+            const payload = event.payload as IndexProgressPayload;
+            indexState.value.progress = payload.progress;
+            indexState.value.message = payload.message;
+            indexState.value.processed = payload.processed;
+            indexState.value.total = payload.total;
+            indexState.value.phase = "collecting";
+          } catch (error) {
+            handleEventError(EVENTS.INDEX.PROGRESS, error);
+          }
+        })
+      );
+
+      listeners.push(
+        await listen(EVENTS.INDEX.FINISHED, (event: any) => {
+          try {
+            const payload = event.payload as IndexFinishedPayload;
+            indexState.value.isActive = false;
+            indexState.value.progress = 100;
+            indexState.value.message = payload.message;
+            indexState.value.total = payload.total;
+            indexState.value.phase = "finished";
+            indexState.value.success = true;
+
+            // Reset après 3 secondes
+            setTimeout(() => {
+              indexState.value.success = false;
+              indexState.value.progress = 0;
+            }, 3000);
+          } catch (error) {
+            handleEventError(EVENTS.INDEX.FINISHED, error);
+          }
+        })
+      );
+
+      listeners.push(
+        await listen(EVENTS.INDEX.ERROR, (event: any) => {
+          try {
+            indexState.value.isActive = false;
+            indexState.value.error = event.payload as string;
+            indexState.value.phase = "error";
+            indexState.value.progress = 0;
+
+            setTimeout(() => {
+              indexState.value.error = "";
+            }, 5000);
+          } catch (error) {
+            handleEventError(EVENTS.INDEX.ERROR, error);
+          }
+        })
+      );
+
+    } catch (error) {
+      console.error("Erreur lors de l'initialisation des listeners d'événements:", error);
     }
   });
 
-  onMounted(async () => {
-    listeners.push(
-      await listen("scan_files_started", () => {
-        inSync.value = true;
-        syncProgress.value = 0;
-        syncMessage.value = "Démarrage du scan...";
-        scanPhase.value = "collecting";
-        syncError.value = "";
-        syncSuccess.value = false;
-      })
-    );
-
-    listeners.push(
-      await listen("scan_files_progress", (event: any) => {
-        const payload = event.payload;
-        syncProgress.value = payload.progress;
-        syncMessage.value = payload.message;
-        currentPath.value = payload.current_path;
-        scanPhase.value = "collecting";
-      })
-    );
-
-    listeners.push(
-      await listen("scan_files_collected", (event: any) => {
-        const payload = event.payload;
-        totalFiles.value = payload.total;
-        syncMessage.value = payload.message;
-        scanPhase.value = "inserting";
-        syncProgress.value = 0;
-      })
-    );
-
-    listeners.push(
-      await listen("scan_files_insert_progress", (event: any) => {
-        const payload = event.payload;
-        syncProgress.value = payload.progress;
-        processedFiles.value = payload.processed;
-        totalFiles.value = payload.total;
-        scanPhase.value = "inserting";
-      })
-    );
-
-    listeners.push(
-      await listen("scan_files_finished", (event: any) => {
-        const payload = event.payload;
-        inSync.value = false;
-        syncProgress.value = 100;
-        syncMessage.value = payload.message;
-        totalFiles.value = payload.total;
-        scanPhase.value = "finished";
-        syncSuccess.value = true;
-
-        setTimeout(() => {
-          syncSuccess.value = false;
-          syncProgress.value = 0;
-        }, 3000);
-      })
-    );
-
-    listeners.push(
-      await listen("scan_files_error", (event: any) => {
-        inSync.value = false;
-        syncError.value = event.payload as string;
-        scanPhase.value = "error";
-        syncProgress.value = 0;
-
-        // Auto-hide après 5 secondes
-        setTimeout(() => {
-          syncError.value = "";
-        }, 5000);
-      })
-    );
-  });
-
   onUnmounted(() => {
-    listeners.forEach((unlisten) => unlisten());
+    listeners.forEach((unlisten) => {
+      try {
+        unlisten();
+      } catch (error) {
+        console.error("Erreur lors de la suppression d'un listener:", error);
+      }
+    });
   });
 
   return {
     inSync,
-    syncMessage,
-    currentPath,
-    totalFiles,
-    processedFiles,
-    syncError,
-    syncSuccess,
-    scanPhase,
-    startSync,
-    listeners,
-    valueProgress,
+    hasError,
+    hasSuccess,
+    overallProgress,
     progressStatus,
     statusIcon,
-    progressText,
+    syncSummary,
+    processDetails,
+    scanState,
+    indexState,
+    startSync,
   };
 };

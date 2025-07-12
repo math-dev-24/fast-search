@@ -9,6 +9,7 @@ pub struct Stat {
     pub unindexed_files: u32,
     pub content_indexed_files: u32,
     pub uncontent_indexed_files: u32,
+    pub unindexable_files: u32,
     pub indexed_percentage: f64,
     pub content_indexed_percentage: f64,
 }

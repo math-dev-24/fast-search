@@ -70,14 +70,7 @@ export const useSearchStore = defineStore('search', {
             this.inLoading = true;
             this.isLoaded = false;
             try {
-                if (this.searchInContent) {
-                    // Recherche dans le contenu
-                    this.result = await invoke('search_content', {
-                        query: this.search,
-                        limit: this.contentSearchLimit
-                    });
-                } else {
-                    // Recherche dans les métadonnées (comportement existant)
+
                     this.result = await invoke('search_files', {
                         search: this.search,
                         types: this.types,
@@ -85,9 +78,10 @@ export const useSearchStore = defineStore('search', {
                         folders: this.folders,
                         sizeLimit: this.sizeLimit,
                         dateRange: this.dateRange,
-                        dateMode: this.dateMode
+                        dateMode: this.dateMode,
+                        inContent: this.searchInContent
                     });
-                }
+                
                 this.isLoaded = true;
             } catch (error) {
                 console.error(error);
