@@ -18,162 +18,157 @@ impl FileRepository for Db {
     }
 
     fn init(&self) -> SqliteResult<()> {
-
-        self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS files (
-                id INTEGER PRIMARY KEY,
-                path TEXT UNIQUE NOT NULL,
-                name TEXT NOT NULL,
-                is_dir INTEGER NOT NULL,
-                file_type TEXT,
-                size INTEGER,
-                last_modified INTEGER,
-                created_at INTEGER,
-                is_indexed INTEGER NOT NULL DEFAULT 0,
-                content_indexed INTEGER NOT NULL DEFAULT 0,
-                is_indexable INTEGER NOT NULL DEFAULT 1,
-                content_hash TEXT
-            )",
-            [],
-        )?;
-
-        let index_queries = vec![
-            "CREATE INDEX IF NOT EXISTS idx_files_name ON files(name COLLATE NOCASE)",
-            "CREATE INDEX IF NOT EXISTS idx_files_is_dir ON files(is_dir)",
-            "CREATE INDEX IF NOT EXISTS idx_files_file_type ON files(file_type)",
-            "CREATE INDEX IF NOT EXISTS idx_files_size ON files(size)",
-            "CREATE INDEX IF NOT EXISTS idx_files_last_modified ON files(last_modified)",
-            "CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at)",
-            "CREATE INDEX IF NOT EXISTS idx_files_path ON files(path)",
-        ];
-
-        for query in index_queries {
-            let _: Result<usize, _> = self.conn.execute(query, []);
-        }
-
-        self.conn.execute("CREATE TABLE IF NOT EXISTS types (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE
-        )", [])?;
-
-        self.conn.execute("CREATE TABLE IF NOT EXISTS paths (
-            id INTEGER PRIMARY KEY,
-            path TEXT NOT NULL UNIQUE
-        )", [])?;
-
+        let init_sql = include_str!("../../../data/init.sql");
+        self.conn.execute_batch(init_sql)?;
         Ok(())
     }
 
     fn search(
-        &self, 
-        query: &str, 
-        file_types: &[String], 
-        is_dir: bool, 
-        folders: &[String], 
-        size_limit: &[usize], 
-        date_range: &[usize], 
-        date_mode: &str, 
-        in_content: bool
-    ) -> SqliteResult<Vec<File>> 
-    {
-       
+        &self,
+        query: &str,
+        file_types: &[String],
+        is_dir: bool,
+        folders: &[String],
+        size_limit: &[usize],
+        date_range: &[usize],
+        date_mode: &str,
+        in_content: bool,
+    ) -> SqliteResult<Vec<File>> {
         let mut conditions = Vec::new();
-        let mut params = Vec::new();
-        let mut string_conditions = Vec::new();
-
-        if !query.trim().is_empty() {
-            let search_query = format!("%{}%", query);
+        let mut params: Vec<String> = Vec::new();
+        let mut extra_conditions = Vec::new();
+    
+        // Recherche dans le nom si on ne fait pas une recherche dans le contenu
+        if !query.trim().is_empty() && !in_content {
             conditions.push("LOWER(name) LIKE LOWER(?)");
-            params.push(search_query);
+            params.push(format!("%{}%", query));
         }
-
+    
+        // Taille du fichier
         if size_limit.len() >= 2 && (size_limit[0] > 0 || size_limit[1] > 0) {
             let min = size_limit[0] as i64 * 1024 * 1024;
-            let max = if size_limit[1] > 0 { 
-                size_limit[1] as i64 * 1024 * 1024 
-            } else { 
+            let max = if size_limit[1] > 0 {
+                size_limit[1] as i64 * 1024 * 1024
+            } else {
                 i64::MAX
             };
-
+    
             conditions.push("size >= ? AND size <= ?");
             params.push(min.to_string());
             params.push(max.to_string());
         }
-
-        if in_content {
-            conditions.push("content_indexed = 1");
-            conditions.push("content_hash IS NOT NULL");
-            conditions.push("content_hash LIKE ?");
-            params.push(format!("%{}%", query));
-        }
-
+    
+        // Date (création ou modification)
         if date_range.len() >= 2 && (date_range[0] > 0 || date_range[1] > 0) {
             let min = date_range[0] as i64;
-            let max = if date_range[1] > 0 { 
-                date_range[1] as i64 
-            } else { 
+            let max = if date_range[1] > 0 {
+                date_range[1] as i64
+            } else {
                 i64::MAX
             };
-
+    
             if date_mode == "create" {
                 conditions.push("created_at >= ? AND created_at <= ?");
             } else {
                 conditions.push("last_modified >= ? AND last_modified <= ?");
             }
-
+    
             params.push(min.to_string());
             params.push(max.to_string());
         }
-
+    
         if is_dir {
             conditions.push("is_dir = 1");
         }
-        
+    
         if !file_types.is_empty() {
             let placeholders = file_types.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-            string_conditions.push(format!("file_type IN ({})", placeholders));
-            params.extend(file_types.iter().map(|s| s.to_string()));
+            extra_conditions.push(format!("file_type IN ({})", placeholders));
+            params.extend(file_types.iter().cloned());
         }
-        
+    
+        // Filtres par chemin dossier
         if !folders.is_empty() {
-            let folder_conditions: Vec<String> = folders.iter()
+            let folder_conditions: Vec<String> = folders
+                .iter()
                 .map(|folder| format!("path LIKE '%{}%'", folder))
                 .collect();
-            string_conditions.push(format!("({})", folder_conditions.join(" OR ")));
+            extra_conditions.push(format!("({})", folder_conditions.join(" OR ")));
         }
-
-        conditions.extend(string_conditions.iter().map(|s| s.as_str()));
-        
+    
+        // Combine toutes les conditions
+        conditions.extend(extra_conditions.iter().map(|s| s.as_str()));
         let where_clause = if conditions.is_empty() {
             "1=1".to_string()
         } else {
             conditions.join(" AND ")
         };
-        
-        let sql_query = format!(
-            "SELECT * FROM files WHERE {} ORDER BY name COLLATE NOCASE LIMIT 10000",
-            where_clause
-        );
-        
+    
+        // Création de la requête SQL
+        let sql_query = if in_content {
+            // Requête avec jointure FTS
+            format!(
+                "SELECT files.* FROM files \
+                 JOIN fts_content ON files.id = fts_content.file_id \
+                 WHERE fts_content.content MATCH ? AND {} \
+                 ORDER BY files.name COLLATE NOCASE LIMIT 10000",
+                where_clause
+            )
+        } else {
+            // Requête sans jointure
+            format!(
+                "SELECT * FROM files \
+                 WHERE {} \
+                 ORDER BY name COLLATE NOCASE LIMIT 10000",
+                where_clause
+            )
+        };
+    
+        // Préparation de la requête
         let mut stmt = self.conn.prepare(&sql_query)?;
-
-        let result = stmt.query_map(rusqlite::params_from_iter(params), |row| {
-            Ok(File {
-                path: PathBuf::from(row.get::<_, String>(1)?),
-                name: row.get(2)?,
-                is_dir: row.get(3)?,
-                file_type: row.get(4)?,
-                size: row.get(5)?,
-                last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
-                created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
-                is_indexed: row.get(8)?,
-                content_indexed: row.get(9)?,
-                is_indexable: row.get(10)?,
-                content_hash: row.get(11)?
-            })
-        })?
-        .collect::<SqliteResult<Vec<_>>>()?;
-        
+    
+        // Insertion de query au bon endroit si in_content = true
+        let all_params: Vec<&dyn rusqlite::ToSql> = if in_content {
+            let mut merged = vec![&query as &dyn rusqlite::ToSql];
+            merged.extend(params.iter().map(|s| s as &dyn rusqlite::ToSql));
+            merged  
+        } else {
+            params.iter().map(|s| s as &dyn rusqlite::ToSql).collect()
+        };
+    
+        // Exécution et mapping
+        let result = stmt
+            .query_map(rusqlite::params_from_iter(all_params), |row| {
+                Ok(File {
+                    path: PathBuf::from(row.get::<_, String>(1)?),
+                    name: row.get(2)?,
+                    is_dir: row.get(3)?,
+                    file_type: row.get(4)?,
+                    size: row.get(5)?,
+                    last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
+                    created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
+                    accessed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(8)?),
+                    is_indexed: row.get(9)?,
+                    content_indexed: row.get(10)?,
+                    is_indexable: row.get(11)?,
+                    is_hidden: row.get(12)?,
+                    is_readonly: row.get(13)?,
+                    is_system: row.get(14)?,
+                    is_executable: row.get(15)?,
+                    is_symlink: row.get(16)?,
+                    permissions: row.get(17)?,
+                    owner: row.get(18)?,
+                    group: row.get(19)?,
+                    mime_type: row.get(20)?,
+                    encoding: row.get(21)?,
+                    line_count: row.get(22)?,
+                    word_count: row.get(23)?,
+                    checksum: row.get(24)?,
+                    is_encrypted: row.get(25)?,
+                })
+            })?
+            .collect::<SqliteResult<Vec<_>>>()?;
+    
         Ok(result)
     }
 
@@ -289,7 +284,7 @@ impl FileRepository for Db {
     }
 
     fn get_uncontent_indexed_files(&self) -> SqliteResult<Vec<File>> {
-        let mut stmt = self.conn.prepare("SELECT * FROM files WHERE content_indexed = 0 AND content_hash IS NULL AND is_indexable = 1")?;
+        let mut stmt = self.conn.prepare("SELECT * FROM files WHERE content_indexed = 0 AND is_indexable = 1")?;
         let files: Vec<File> = stmt.query_map([], |row| {
             Ok(File {
                 path: PathBuf::from(row.get::<_, String>(1)?),
@@ -299,10 +294,24 @@ impl FileRepository for Db {
                 size: row.get(5)?,
                 last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
                 created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
-                is_indexed: row.get(8)?,
-                content_indexed: row.get(9)?,
-                is_indexable: row.get(10)?,
-                content_hash: row.get(11)?
+                accessed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(8)?),
+                is_indexed: row.get(9)?,
+                content_indexed: row.get(10)?,
+                is_indexable: row.get(11)?,
+                is_hidden: row.get(12)?,
+                is_readonly: row.get(13)?,
+                is_system: row.get(14)?,
+                is_executable: row.get(15)?,
+                is_symlink: row.get(16)?,
+                permissions: row.get(17)?,
+                owner: row.get(18)?,
+                group: row.get(19)?,
+                mime_type: row.get(20)?,
+                encoding: row.get(21)?,
+                line_count: row.get(22)?,
+                word_count: row.get(23)?,
+                checksum: row.get(24)?,
+                is_encrypted: row.get(25)?,
             })
         })?
         .collect::<SqliteResult<Vec<_>>>()?;
@@ -310,10 +319,29 @@ impl FileRepository for Db {
     }
 
     fn update_file_index_status(&mut self, file: &File, content_hash: String, is_indexable: bool) -> SqliteResult<()> {
-        self.conn.execute(
-            "UPDATE files SET content_indexed = ?, content_hash = ?, is_indexable = ? WHERE path = ?", 
-            rusqlite::params![true, content_hash, is_indexable, file.path.to_str().unwrap()]
+
+        let tx = self.conn.transaction()?;
+
+        // D'abord, récupérer l'ID du fichier
+        let file_id: i64 = tx.query_row(
+            "SELECT id FROM files WHERE path = ?",
+            [file.path.to_str().unwrap()],
+            |row| row.get(0)
         )?;
+
+        // Insérer le contenu dans la table FTS
+        tx.execute(
+            "INSERT INTO fts_content (content, file_id) VALUES (?, ?)",
+            rusqlite::params![content_hash, file_id]
+        )?;
+
+        // Mettre à jour le statut d'indexation du fichier
+        tx.execute(
+            "UPDATE files SET content_indexed = ?, is_indexable = ? WHERE path = ?", 
+            rusqlite::params![true, is_indexable, file.path.to_str().unwrap()]
+        )?;
+
+        tx.commit()?;
         Ok(())
     }
 }
@@ -372,7 +400,7 @@ impl Db {
 
         let tx = self.conn.transaction()?;
         
-        let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at, is_indexed, content_indexed, is_indexable, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
+        let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at, accessed_at, is_indexed, content_indexed, is_indexable, is_hidden, is_readonly, is_system, is_executable, is_symlink, permissions, owner, \"group\", mime_type, encoding, line_count, word_count, checksum, is_encrypted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
 
         for file in &new_files {
             stmt.execute(rusqlite::params![
@@ -383,10 +411,24 @@ impl Db {
                 file.size, 
                 file.last_modified.duration_since(UNIX_EPOCH).unwrap().as_secs(), 
                 file.created_at.duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                file.accessed_at.duration_since(UNIX_EPOCH).unwrap().as_secs(),
                 file.is_indexed,
                 file.content_indexed,
                 file.is_indexable,
-                file.content_hash
+                file.is_hidden,
+                file.is_readonly,
+                file.is_system,
+                file.is_executable,
+                file.is_symlink,
+                file.permissions,
+                file.owner,
+                file.group,
+                file.mime_type,
+                file.encoding,
+                file.line_count,
+                file.word_count,
+                file.checksum,
+                file.is_encrypted
             ])?;
         }
 

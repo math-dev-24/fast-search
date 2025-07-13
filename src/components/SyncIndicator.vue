@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { NProgress, NText, NFlex, NIcon } from 'naive-ui';
 import { SyncCircle, CheckmarkCircle, AlertCircle } from '@vicons/ionicons5';
+import type { ProgressStatus } from 'naive-ui';
 
 interface Props {
   inSync: boolean;
   hasError: boolean;
   hasSuccess: boolean;
   overallProgress: number;
-  progressStatus: 'info' | 'success' | 'error' | 'warning';
+  progressStatus: ProgressStatus;
   syncSummary: string;
 }
 

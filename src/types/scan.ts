@@ -1,4 +1,4 @@
-export type Phase = "collecting" | "inserting" | "finished" | "error";
+export type Phase = "idle" | "collecting" | "inserting" | "finished" | "error";
 
 
 export interface IndexProgress {

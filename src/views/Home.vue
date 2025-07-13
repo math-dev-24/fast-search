@@ -6,15 +6,15 @@
             <NCard class="mb-4">
                 <NSpace justify="space-around" align="center">
                     <NStatistic label="Résultats">
-                        <NNumberAnimation :from="0" :to="searchStore.filterResult.length" :duration="1000" />
+                        <NNumberAnimation :from="previousTotalResults" :to="searchStore.filterResult.length" :duration="1000" />
                     </NStatistic>
                     <NDivider vertical />
                     <NStatistic label="Fichiers">
-                        <NNumberAnimation :from="0" :to="searchStore.filterResult.filter(file => !file.is_dir).length" :duration="1000" />
+                        <NNumberAnimation :from="previousFilesCount" :to="searchStore.filterResult.filter(file => !file.is_dir).length" :duration="1000" />
                     </NStatistic>
                     <NDivider vertical />
                     <NStatistic label="Dossiers">
-                        <NNumberAnimation :from="0" :to="searchStore.filterResult.filter(file => file.is_dir).length" :duration="1000" />
+                        <NNumberAnimation :from="previousFoldersCount" :to="searchStore.filterResult.filter(file => file.is_dir).length" :duration="1000" />
                     </NStatistic>
                 </NSpace>
             </NCard>
@@ -68,21 +68,21 @@
             </div>
         </template>
     </NSpace>
-    <FilePreview
-        :show="showPreview"
-        :file="previewFile" 
-        @update:show="showPreview = false"
+    <FileDetail
+        :show="showDetail"
+        :file="detailFile" 
+        @update:show="showDetail = false"
     />
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { NSpace, NGrid, NGi, NDivider, NStatistic, NCard, NText, NEmpty, NButton, NNumberAnimation } from 'naive-ui';
 import Search from '../components/Search.vue';
 import CardFile from '../components/CardFile.vue';
 import CardFolder from '../components/CardFolder.vue';
 import Filter from '../components/Filter.vue';
-import FilePreview from '../components/FilePreview.vue';
+import FileDetail from '../components/FileDetail.vue';
 import { useSearchStore } from '../shared/store/search';
 import type { File } from '../types';
 
@@ -90,12 +90,22 @@ const searchStore = useSearchStore();
 const maxFiles = ref<number>(20);
 const maxFolders = ref<number>(8);
 
-const previewFile = ref(null as null | File);
-const showPreview = ref(false);
+const detailFile = ref(null as null | File);
+const showDetail = ref(false);
+
+const previousTotalResults = ref<number>(0);
+const previousFilesCount = ref<number>(0);
+const previousFoldersCount = ref<number>(0);
+
+watch(() => searchStore.filterResult, () => {
+    previousTotalResults.value = searchStore.filterResult.length;
+    previousFilesCount.value = searchStore.filterResult.filter(file => !file.is_dir).length;
+    previousFoldersCount.value = searchStore.filterResult.filter(file => file.is_dir).length;
+}, { deep: true });
 
 function handlePreviewFile(file: File) {
-    previewFile.value = file;
-    showPreview.value = true;
+    detailFile.value = file;
+    showDetail.value = true;
 }
 
 </script>

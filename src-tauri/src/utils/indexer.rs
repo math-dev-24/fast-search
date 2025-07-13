@@ -10,13 +10,12 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use crate::services::file_service::FileService;
+use crate::adapters::repository::sqlite::Db;
 
-// Configuration
-const CHUNK_SIZE: usize = 50; // Taille des chunks pour le traitement parallèle
+const CHUNK_SIZE: usize = 50;
 
-const PROGRESS_UPDATE_INTERVAL: Duration = Duration::from_millis(500); // Intervalle de mise à jour du progrès
+const PROGRESS_UPDATE_INTERVAL: Duration = Duration::from_millis(1000);
 
-// Structure pour le suivi du progrès
 #[derive(Debug, Clone)]
 struct ProgressTracker {
     total_files: usize,
@@ -81,10 +80,9 @@ fn can_index_file(file_path: &Path) -> bool {
     can_index
 }
 
-// Fonction pour traiter un fichier individuel
 async fn process_single_file(
     file: File,
-    service_repository: Arc<Mutex<FileService<crate::adapters::repository::sqlite::Db>>>,
+    service_repository: Arc<Mutex<FileService<Db>>>,
 ) -> Result<(), String> {
     let mut repo = service_repository.lock()
         .map_err(|e| format!("Erreur d'accès au repository: {}", e))?;

@@ -188,7 +188,18 @@ export const useSync = () => {
 
   // Fonction utilitaire pour gérer les erreurs d'événements
   const handleEventError = (eventName: string, error: any) => {
-    console.error(`Erreur lors de l'écoute de l'événement ${eventName}:`, error);
+    console.error(`Erreur lors du traitement de l'événement ${eventName}:`, error);
+    
+    // Afficher l'erreur dans l'interface utilisateur
+    const errorMessage = `Erreur de communication: ${error}`;
+    scanState.value.error = errorMessage;
+    indexState.value.error = errorMessage;
+    
+    // Reset automatique après 10 secondes
+    setTimeout(() => {
+      scanState.value.error = "";
+      indexState.value.error = "";
+    }, 10000);
   };
 
   // Fonction utilitaire pour reset un état de processus
@@ -199,28 +210,59 @@ export const useSync = () => {
     state.currentPath = "";
     state.total = 0;
     state.processed = 0;
-    state.phase = "collecting";
+    state.phase = "idle";
     state.error = "";
     state.success = false;
   };
 
   const startSync = async () => {
     try {
-      // Reset des états
+      // Reset des états avant de commencer
       resetProcessState(scanState.value, true);
       resetProcessState(indexState.value, true);
       
       scanState.value.message = "Initialisation du scan des fichiers...";
       indexState.value.message = "Initialisation de l'indexation du contenu...";
 
-      await invoke("sync_files_and_folders");
-      await invoke("start_content_indexing");
+      // Diagnostic préventif des chemins
+      try {
+        const paths = await invoke("get_all_paths");
+        if (Array.isArray(paths) && paths.length > 0) {
+          const issues = await invoke("diagnose_scan_issues", { paths });
+          if (Array.isArray(issues) && issues.length > 0 && !issues[0].includes("Aucun problème")) {
+            console.warn("Problèmes détectés avant le scan:", issues);
+            scanState.value.message = "Problèmes détectés, scan en cours...";
+          }
+        }
+      } catch (diagnosticError) {
+        console.warn("Erreur lors du diagnostic:", diagnosticError);
+      }
+
+      // Ajout d'un timeout pour éviter les blocages
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Timeout: Le scan prend trop de temps")), 600000); // 10 minutes
+      });
+
+      const syncPromise = Promise.all([
+        invoke("sync_files_and_folders"),
+        invoke("start_content_indexing")
+      ]);
+
+      await Promise.race([syncPromise, timeoutPromise]);
     } catch (error) {
       const errorMsg = `Erreur lors du démarrage: ${error}`;
+      console.error(errorMsg);
+      
       scanState.value.error = errorMsg;
       indexState.value.error = errorMsg;
       scanState.value.isActive = false;
       indexState.value.isActive = false;
+      
+      // Reset automatique après 15 secondes
+      setTimeout(() => {
+        scanState.value.error = "";
+        indexState.value.error = "";
+      }, 15000);
     }
   };
 
