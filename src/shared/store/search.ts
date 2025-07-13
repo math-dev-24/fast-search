@@ -1,52 +1,49 @@
 import { defineStore } from 'pinia';
 import { invoke } from '@tauri-apps/api/core';
-import type { File } from '../../types/file';
+import type { File, Stat } from '../../types';
+import { type SearchQuery, SortBy, SortOrder, DateMode } from '../../types/search';
 import { DateTime } from 'luxon';
 
-
 type SearchState = {
-    search: string;
-    searchResult: string;
-    types: string[];
-    folders: string[];
-    sizeLimit: [number, number];
-    dateRange: [number, number];
-    dateMode: 'create' | 'modify';
-    isDir: boolean;
+    query: SearchQuery;
     inLoading: boolean;
     result: File[];
     isLoaded: boolean;
-    showPath: boolean;
-    searchInPath: boolean;
-    autoSubmit: boolean;
-    searchInContent: boolean;
-    contentSearchLimit: number;
+    search: string;
+    auto_submit: boolean;
 }
 
 export const useSearchStore = defineStore('search', {
     state: (): SearchState => ({
-        search: '',
-        searchResult: '',
-        types: [],
-        folders: [],
-        sizeLimit: [0, 1000],
-        dateRange: [0, DateTime.now().endOf('day').toMillis()],
-        dateMode: 'modify',
-        isDir: false,
+                    query: {
+                text: '',
+                filters: {
+                    is_dir: false,
+                    folders: [],
+                    file_types: [],
+                    size_limit: [0, 1000],
+                    date_range: [0, DateTime.now().endOf('day').toMillis()],
+                    date_mode: DateMode.MODIFY,
+                    search_in_content: false
+                },
+                sort_by: SortBy.NAME,
+                sort_order: SortOrder.ASC,
+                limit: 1000,
+                offset: 0,
+                search_in_content: false,
+                path_pattern: null
+            },
         inLoading: false,
         isLoaded: false,
-        showPath: true,
-        searchInPath: false,
         result: [],
-        autoSubmit: true,
-        searchInContent: false,
-        contentSearchLimit: 1000
+        search: '',
+        auto_submit: true
     }),
 
     getters: {
         filterResult(): File[] {
             return this.result.filter(
-                file => file.name.toLowerCase().includes(this.searchResult.toLowerCase())
+                file => file.name.toLowerCase().includes(this.search.toLowerCase())
             );
         },
 
@@ -55,7 +52,7 @@ export const useSearchStore = defineStore('search', {
             const uniqueNames = [...new Set(allNames)];
             
             const filteredSuggestions = uniqueNames.filter(name => 
-                name.toLowerCase().includes(this.searchResult.toLowerCase())
+                name.toLowerCase().includes(this.search.toLowerCase())
             );
             
             return filteredSuggestions.slice(0, 5).map(name => ({
@@ -70,18 +67,8 @@ export const useSearchStore = defineStore('search', {
             this.inLoading = true;
             this.isLoaded = false;
             try {
-
-                    this.result = await invoke('search_files', {
-                        search: this.search,
-                        types: this.types,
-                        isDir: this.isDir,
-                        folders: this.folders,
-                        sizeLimit: this.sizeLimit,
-                        dateRange: this.dateRange,
-                        dateMode: this.dateMode,
-                        inContent: this.searchInContent
-                    });
-                
+                console.log(JSON.stringify(this.query));
+                this.result = await invoke('search_files', { query: this.query });
                 this.isLoaded = true;
             } catch (error) {
                 console.error(error);
@@ -92,7 +79,8 @@ export const useSearchStore = defineStore('search', {
 
         async getIndexStats() {
             try {
-                const stats = await invoke('get_index_stats');
+                const stats = await invoke<Stat>('get_index_stats');
+                console.log(stats);
                 return stats;
             } catch (error) {
                 console.error('Erreur récupération stats indexation:', error);
@@ -109,20 +97,25 @@ export const useSearchStore = defineStore('search', {
         },
 
         reset_search() {
-            this.search = '';
-            this.searchResult = '';
-            this.types = [];
-            this.folders = [];
-            this.sizeLimit = [0, 1000];
-            this.dateRange = [0, 9999999999];
-            this.dateMode = 'modify';
-            this.isDir = false;
-            this.inLoading = false;
+            this.query = {
+                text: '',
+                filters: {
+                    is_dir: false,
+                    folders: [],
+                    file_types: [],
+                    size_limit: [0, 1000],
+                    date_range: [0, DateTime.now().endOf('day').toMillis()],
+                    date_mode: DateMode.MODIFY,
+                    search_in_content: false
+                },
+                sort_by: SortBy.NAME,
+                sort_order: SortOrder.ASC,
+                limit: 100,
+                offset: 0,
+                search_in_content: false,
+                path_pattern: null
+            };
             this.result = [];
-            this.isLoaded = false;
-            this.showPath = true;
-            this.searchInPath = false;
-            this.autoSubmit = true;
         },
 
         async openFile(path: string) {
@@ -143,10 +136,8 @@ export const useSearchStore = defineStore('search', {
                 return;
             }
 
-            // En-têtes CSV en français
             const headers = ['Chemin', 'Nom', 'Type', 'Taille (octets)', 'Dernière modification', 'Date de création', 'Est un dossier'];
             
-            // Fonction pour échapper les valeurs CSV (gérer les virgules et guillemets)
             const escapeCsvValue = (value: any): string => {
                 if (value === null || value === undefined) return '';
                 const stringValue = String(value);
@@ -171,18 +162,15 @@ export const useSearchStore = defineStore('search', {
 
             const csvContent = csvRows.join('\n');
             
-            // Ajouter BOM pour l'encodage UTF-8 (important pour Excel)
             const BOM = '\uFEFF';
             const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
             
-            // Créer le lien de téléchargement
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = `recherche_${new Date().toISOString().split('T')[0]}.csv`;
             a.style.display = 'none';
             
-            // Ajouter au DOM, cliquer et nettoyer
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

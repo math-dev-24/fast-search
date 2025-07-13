@@ -4,7 +4,7 @@ mod entities;
 mod utils;
 mod ports;
 
-use entities::{file::File, stat::Stat};
+use entities::{file::File, stat::Stat, search::SearchQuery};
 use tauri::{async_runtime, Manager};
 use utils::{generator::get_service_repository, scan::scan_files_async, indexer::index_content_async};
 use services::content_indexer_service::ContentIndexerService;
@@ -83,22 +83,12 @@ fn save_paths(paths: Vec<String>, window: tauri::WebviewWindow) -> Result<(), St
 
 #[tauri::command]
 fn search_files(
-    search: String, 
-    types: Option<Vec<String>>, 
-    is_dir: bool, 
-    folders: Option<Vec<String>>, 
-    size_limit: Vec<usize>, 
-    date_range: Vec<usize>,
-    date_mode: String,
-    in_content: bool
+    query: SearchQuery
 ) -> Result<Vec<File>, String> {
-        
-    let types_vec = types.unwrap_or_default();
-    let folders_vec = folders.unwrap_or_default();
     
     let service_repository = get_service_repository()?;
 
-    let files = service_repository.search(&search, &types_vec, is_dir, &folders_vec, &size_limit, &date_range, &date_mode, in_content)?;
+    let files = service_repository.search(&query)?;
     Ok(files)
 }
 

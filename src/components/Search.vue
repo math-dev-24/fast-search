@@ -2,8 +2,8 @@
     <div>
         <div class="space-y-6">
             <div class="relative">
-                <NInput v-model:value="modelValue.search" placeholder="Rechercher..." :loading="modelValue.inLoading"
-                    :disabled="modelValue.inLoading" @keyup.enter="emit('search')" tabindex="1" size="large"
+                <NInput v-model:value="searchStore.query.text" placeholder="Rechercher..." :loading="searchStore.inLoading"
+                    :disabled="searchStore.inLoading" @keyup.enter="searchStore.searchFiles" tabindex="1" size="large"
                     class="text-lg">
                     <template #prefix>
                         <NIcon size="20">
@@ -16,29 +16,29 @@
             <div class="grid grid-cols-2 gap-4">
                 <div class="space-y-2">
                     <label class="text-sm font-medium">Types de fichiers</label>
-                    <NSelect v-model:value="modelValue.types" :options="typeFiles" multiple @update:value="handleSearch"
-                        :loading="modelValue.inLoading" :disabled="modelValue.inLoading" filterable
+                    <NSelect v-model:value="searchStore.query.filters.file_types" :options="typeFiles" multiple @update:value="handleSearch"
+                        :loading="searchStore.inLoading" :disabled="searchStore.inLoading" filterable
                         placeholder="Sélectionner les types..." class="w-full" />
                 </div>
 
                 <div class="space-y-2">
                     <label class="text-sm font-medium">Dossiers</label>
-                    <NSelect v-model:value="modelValue.folders" :options="folders" multiple @update:value="handleSearch"
-                        :loading="modelValue.inLoading" :disabled="modelValue.inLoading" filterable
+                    <NSelect v-model:value="searchStore.query.filters.folders" :options="folders" multiple @update:value="handleSearch"
+                        :loading="searchStore.inLoading" :disabled="searchStore.inLoading" filterable
                         placeholder="Sélectionner les dossiers..." class="w-full" />
                 </div>
 
                 <div class="space-y-2">
-                    <label class="text-sm font-medium">Filtrer par date de <span class="underline" @click="updateDateMode">{{ modelValue.dateMode === 'create' ? 'création' : 'modification' }}</span> :</label>
-                    <NDatePicker v-model:value="modelValue.dateRange" type="daterange"  clearable @update:value="handleDateChange" />
+                    <label class="text-sm font-medium">Filtrer par date de <span class="underline" @click="updateDateMode">{{ searchStore.query.filters.date_mode === DateMode.CREATE ? 'création' : 'modification' }}</span> :</label>
+                    <NDatePicker v-model:value="searchStore.query.filters.date_range" type="daterange"  clearable @update:value="handleDateChange" />
                     <div class="flex items-center gap-2">
                         <NButton 
                             v-for="shortcut in listShortcuts" 
                             :key="shortcut" 
                             @click="() => { updateDateRange(shortcut) }" 
-                            :disabled="isSelectedDate(modelValue.dateRange, getDateShortcuts(shortcut))"
+                            :disabled="isSelectedDate(searchStore.query.filters.date_range, getDateShortcuts(shortcut))"
                             tertiary
-                            :type="isSelectedDate(modelValue.dateRange, getDateShortcuts(shortcut)) ? 'info' : 'default'"
+                            :type="isSelectedDate(searchStore.query.filters.date_range, getDateShortcuts(shortcut)) ? 'info' : 'default'"
                             class="flex-1"
                         >
                             {{ shortcut }}
@@ -48,19 +48,27 @@
 
                 <div class="space-y-2">
                     <label class="text-sm font-medium">Taille (en Mo)</label>
-                    <div class="flex items-center space-x-2">
-                        <NInputNumber v-model:value="modelValue.sizeLimit[0]" placeholder="Min" :min="0"
-                            :max="modelValue.sizeLimit[1]" @update:value="() => handleSizeChange()" />
+                    <div class="flex items-center space-x-2 w-full">
+                        <NInputNumber v-model:value="searchStore.query.filters.size_limit[0]" placeholder="Min" :min="0"
+                            :max="searchStore.query.filters.size_limit[1]" @update:value="() => handleSizeChange()" />
                         <span class="text-gray-500">-</span>
-                        <NInputNumber v-model:value="modelValue.sizeLimit[1]" placeholder="Max"
-                            :min="modelValue.sizeLimit[0] || 0" @update:value="() => handleSizeChange()" />
+                        <NInputNumber v-model:value="searchStore.query.filters.size_limit[1]" placeholder="Max"
+                            :min="searchStore.query.filters.size_limit[0] || 0" @update:value="() => handleSizeChange()" />
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">Limite de résultats</label>
+                        <NInputNumber v-model:value="searchStore.query.limit" placeholder="Limite" :min="1" :max="10000" />
                     </div>
                 </div>
 
 
+
+
+
+
                 <NSpace vertical class="col-span-2 mt-2">
                     <NSpace>
-                        <NSwitch v-model:value="modelValue.isDir" @update:value="handleSearch">
+                        <NSwitch v-model:value="searchStore.query.filters.is_dir" @update:value="handleSearch">
                             <template #checked>
                                 <div class="flex items-center space-x-2">
                                     <NIcon size="16" class="text-blue-600">
@@ -78,7 +86,7 @@
                                 </div>
                             </template>
                         </NSwitch>
-                        <NSwitch v-model:value="modelValue.autoSubmit">
+                        <NSwitch v-model:value="searchStore.auto_submit">
                             <template #checked>
                                 <div class="flex items-center space-x-2">
                                     <NIcon size="16">
@@ -96,7 +104,7 @@
                                 </div>
                             </template>
                         </NSwitch>
-                        <NSwitch v-model:value="modelValue.searchInContent">
+                        <NSwitch v-model:value="searchStore.query.filters.search_in_content">
                             <template #checked>
                                 <div class="flex items-center space-x-2">
                                     <NIcon size="16" class="text-green-600">
@@ -117,7 +125,7 @@
                     </NSpace>
 
                     <div class="w-full grid grid-cols-3">
-                        <NButton @click="() => { syncTypeFiles(); syncFolders() }" :disabled="modelValue.inLoading"
+                        <NButton @click="() => { syncTypeFiles(); syncFolders() }" :disabled="searchStore.inLoading"
                             tertiary type="info" class="flex-1">
                             <NIcon size="16" class="mr-2">
                                 <SyncCircleOutline />
@@ -130,7 +138,7 @@
                             </NIcon>
                             Reset
                         </NButton>
-                        <NButton @click="emit('search')" type="primary" :disabled="modelValue.inLoading">
+                        <NButton @click="emit('search')" type="primary" :disabled="searchStore.inLoading">
                             <NIcon size="16" class="mr-2">
                                 <Search />
                             </NIcon>
@@ -150,27 +158,15 @@ import { NInput, NButton, NIcon, NSelect, type SelectOption, NSwitch, NSpace, NI
 import { Search, SyncCircleOutline, Refresh, Folder, Document, RefreshCircle, DocumentText } from '@vicons/ionicons5';
 import { useDebounceFn } from '@vueuse/core';
 import { useDate } from '../composables/useDate';
-
-const modelValue = defineModel<{
-    search: string;
-    types: string[];
-    folders: string[];
-    isDir: boolean;
-    inLoading: boolean;
-    showPath: boolean;
-    autoSubmit: boolean;
-    dateMode: 'create' | 'modify';
-    sizeLimit: [number, number];
-    dateRange: [number, number];
-    searchInContent: boolean;
-    contentSearchLimit: number;
-}>({
-    required: true
-});
+import { useSearchStore } from '../shared/store/search';
+import { DateMode } from '../types/search';
 
 const typeFiles = ref<SelectOption[]>([]);
 const folders = ref<SelectOption[]>([]);
+
 const { dateShortcuts, listShortcuts, isSelectedDate } = useDate();
+
+const searchStore = useSearchStore();
 
 const emit = defineEmits<{
     (e: 'search'): void;
@@ -183,7 +179,7 @@ onMounted(async () => {
 })
 
 const syncTypeFiles = async () => {
-    modelValue.value.inLoading = true;
+    searchStore.inLoading = true;
     try {
         const result = await invoke<string[]>('get_all_types');
         typeFiles.value = result.map(type => ({
@@ -193,12 +189,12 @@ const syncTypeFiles = async () => {
     } catch (error) {
         console.error(error);
     } finally {
-        modelValue.value.inLoading = false;
+        searchStore.inLoading = false;
     }
 }
 
 const syncFolders = async () => {
-    modelValue.value.inLoading = true;
+    searchStore.inLoading = true;
     try {
         const result = await invoke<string[]>('get_all_folders');
         folders.value = result.map(folder => ({
@@ -208,14 +204,14 @@ const syncFolders = async () => {
     } catch (error) {
         console.error(error);
     } finally {
-        modelValue.value.inLoading = false;
+        searchStore.inLoading = false;
     }
 }
 
 const emitSearchDebounced = useDebounceFn(() => emit('search'), 500);
 
 const handleSearch = () => {
-    if (modelValue.value.autoSubmit && (modelValue.value.search.length > 0 || modelValue.value.types.length > 0 || modelValue.value.folders.length > 0) && !modelValue.value.inLoading) {
+    if (searchStore.auto_submit && (searchStore.query.text.length > 0 || searchStore.query.filters.file_types.length > 0 || searchStore.query.filters.folders.length > 0) && !searchStore.inLoading) {
         emitSearchDebounced();
     }
 }
@@ -228,7 +224,7 @@ const handleSizeChange = () => {
     handleSearch();
 }
 
-watch(() => modelValue.value.search, () => {
+watch(() => searchStore.query.text, () => {
     handleSearch();
 });
 
@@ -237,12 +233,12 @@ const getDateShortcuts = (shortcut: string) => {
 }
 
 const updateDateRange = (shortcut: string) => {
-    modelValue.value.dateRange = getDateShortcuts(shortcut);
+    searchStore.query.filters.date_range = getDateShortcuts(shortcut);
     handleDateChange();
 }
 
 const updateDateMode = () => {
-    modelValue.value.dateMode = modelValue.value.dateMode === 'create' ? 'modify' : 'create';
+    searchStore.query.filters.date_mode = searchStore.query.filters.date_mode === DateMode.CREATE ? DateMode.MODIFY : DateMode.CREATE;
     handleDateChange();
 }
 

@@ -28,7 +28,15 @@ export const useDate = () => {
         }
     };
 
-    const isSelectedDate = (date: [number, number], selectedDate: [number, number]): boolean => {
+    const isSelectedDate = (date: [number, number] | undefined, selectedDate: [number, number] | undefined): boolean => {
+        if (!date || !selectedDate) {
+            return false;
+        }
+        
+        if (date.length < 2 || selectedDate.length < 2) {
+            return false;
+        }
+        
         return date[0] === selectedDate[0] && date[1] === selectedDate[1];
     };
 

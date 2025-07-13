@@ -5,6 +5,7 @@ use crate::entities::file::File;
 use crate::entities::stat::Stat;
 use crate::ports::repository::FileRepository;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use crate::entities::search::{SearchQuery, DateMode, SortBy, SortOrder};
 
 pub struct Db {
     pub conn: Connection,
@@ -25,30 +26,50 @@ impl FileRepository for Db {
 
     fn search(
         &self,
-        query: &str,
-        file_types: &[String],
-        is_dir: bool,
-        folders: &[String],
-        size_limit: &[usize],
-        date_range: &[usize],
-        date_mode: &str,
-        in_content: bool,
+        query: &SearchQuery,
     ) -> SqliteResult<Vec<File>> {
         let mut conditions = Vec::new();
         let mut params: Vec<String> = Vec::new();
         let mut extra_conditions = Vec::new();
     
-        // Recherche dans le nom si on ne fait pas une recherche dans le contenu
-        if !query.trim().is_empty() && !in_content {
-            conditions.push("LOWER(name) LIKE LOWER(?)");
-            params.push(format!("%{}%", query));
+        // Recherche textuelle dans le nom ou le chemin
+        if !query.text.trim().is_empty() {
+            if query.search_in_content {
+                // La recherche dans le contenu sera gérée par la jointure FTS
+            } else {
+                // Recherche dans le nom et le chemin
+                conditions.push("(LOWER(name) LIKE LOWER(?) OR LOWER(path) LIKE LOWER(?))");
+                params.push(format!("%{}%", query.text));
+                params.push(format!("%{}%", query.text));
+            }
         }
     
-        // Taille du fichier
-        if size_limit.len() >= 2 && (size_limit[0] > 0 || size_limit[1] > 0) {
-            let min = size_limit[0] as i64 * 1024 * 1024;
-            let max = if size_limit[1] > 0 {
-                size_limit[1] as i64 * 1024 * 1024
+        // Filtres de type de fichier
+        if query.filters.is_dir {
+            conditions.push("is_dir = 1");
+        }
+    
+        // Extensions de fichiers
+        if !query.filters.file_types.is_empty() {
+            let placeholders = query.filters.file_types.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            extra_conditions.push(format!("file_type IN ({})", placeholders));
+            params.extend(query.filters.file_types.iter().cloned());
+        }
+    
+        // Filtres par dossier
+        if !query.filters.folders.is_empty() {
+            let folder_conditions: Vec<String> = query.filters.folders
+                .iter()
+                .map(|folder| format!("path LIKE '%{}%'", folder))
+                .collect();
+            extra_conditions.push(format!("({})", folder_conditions.join(" OR ")));
+        }
+    
+        // Filtres de taille
+        if query.filters.size_limit.len() >= 2 && (query.filters.size_limit[0] > 0 || query.filters.size_limit[1] > 0) {
+            let min = query.filters.size_limit[0] as i64 * 1024 * 1024; // Conversion en bytes
+            let max = if query.filters.size_limit[1] > 0 {
+                query.filters.size_limit[1] as i64 * 1024 * 1024
             } else {
                 i64::MAX
             };
@@ -58,16 +79,16 @@ impl FileRepository for Db {
             params.push(max.to_string());
         }
     
-        // Date (création ou modification)
-        if date_range.len() >= 2 && (date_range[0] > 0 || date_range[1] > 0) {
-            let min = date_range[0] as i64;
-            let max = if date_range[1] > 0 {
-                date_range[1] as i64
+        // Filtres de dates
+        if query.filters.date_range.len() >= 2 && (query.filters.date_range[0] > 0 || query.filters.date_range[1] > 0) {
+            let min = query.filters.date_range[0] as i64;
+            let max = if query.filters.date_range[1] > 0 {
+                query.filters.date_range[1] as i64
             } else {
                 i64::MAX
             };
     
-            if date_mode == "create" {
+            if query.filters.date_mode == DateMode::Create {
                 conditions.push("created_at >= ? AND created_at <= ?");
             } else {
                 conditions.push("last_modified >= ? AND last_modified <= ?");
@@ -77,23 +98,12 @@ impl FileRepository for Db {
             params.push(max.to_string());
         }
     
-        if is_dir {
-            conditions.push("is_dir = 1");
-        }
-    
-        if !file_types.is_empty() {
-            let placeholders = file_types.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-            extra_conditions.push(format!("file_type IN ({})", placeholders));
-            params.extend(file_types.iter().cloned());
-        }
-    
-        // Filtres par chemin dossier
-        if !folders.is_empty() {
-            let folder_conditions: Vec<String> = folders
-                .iter()
-                .map(|folder| format!("path LIKE '%{}%'", folder))
-                .collect();
-            extra_conditions.push(format!("({})", folder_conditions.join(" OR ")));
+        // Recherche par pattern de chemin
+        if let Some(path_pattern) = &query.path_pattern {
+            if !path_pattern.trim().is_empty() {
+                conditions.push("path LIKE ?");
+                params.push(format!("%{}%", path_pattern));
+            }
         }
     
         // Combine toutes les conditions
@@ -104,32 +114,46 @@ impl FileRepository for Db {
             conditions.join(" AND ")
         };
     
+        // Construction de l'ORDER BY avec COLLATE NOCASE pour les chaînes
+        let order_by = match query.sort_by {
+            SortBy::Name => "name COLLATE NOCASE",
+            SortBy::Size => "size",
+            SortBy::LastModified => "last_modified",
+            SortBy::CreatedAt => "created_at",
+            SortBy::AccessedAt => "accessed_at",
+        };
+        
+        let sort_order = match query.sort_order {
+            SortOrder::Asc => "ASC",
+            SortOrder::Desc => "DESC",
+        };
+    
         // Création de la requête SQL
-        let sql_query = if in_content {
-            // Requête avec jointure FTS
+        let sql_query = if query.search_in_content && !query.text.trim().is_empty() {
+            // Requête avec jointure FTS pour la recherche dans le contenu
             format!(
                 "SELECT files.* FROM files \
                  JOIN fts_content ON files.id = fts_content.file_id \
                  WHERE fts_content.content MATCH ? AND {} \
-                 ORDER BY files.name COLLATE NOCASE LIMIT 10000",
-                where_clause
+                 ORDER BY files.{} {} LIMIT {} OFFSET {}",
+                where_clause, order_by, sort_order, query.limit, query.offset
             )
         } else {
             // Requête sans jointure
             format!(
                 "SELECT * FROM files \
                  WHERE {} \
-                 ORDER BY name COLLATE NOCASE LIMIT 10000",
-                where_clause
+                 ORDER BY {} {} LIMIT {} OFFSET {}",
+                where_clause, order_by, sort_order, query.limit, query.offset
             )
         };
     
         // Préparation de la requête
         let mut stmt = self.conn.prepare(&sql_query)?;
     
-        // Insertion de query au bon endroit si in_content = true
-        let all_params: Vec<&dyn rusqlite::ToSql> = if in_content {
-            let mut merged = vec![&query as &dyn rusqlite::ToSql];
+        // Insertion des paramètres
+        let all_params: Vec<&dyn rusqlite::ToSql> = if query.search_in_content && !query.text.trim().is_empty() {
+            let mut merged = vec![&query.text as &dyn rusqlite::ToSql];
             merged.extend(params.iter().map(|s| s as &dyn rusqlite::ToSql));
             merged  
         } else {
