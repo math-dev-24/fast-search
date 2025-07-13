@@ -1,8 +1,13 @@
 # Base de données
 *.sqlite
 *.db
-db.sqlite
-fast-search.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.db-trace
+*.db-trace-wal
+*.db-trace-journal
+*.db-trace-wal
 
 # Fichiers de build
 target/

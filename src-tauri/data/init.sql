@@ -1,6 +1,3 @@
--- Initialisation de la base de données Fast Search
--- Ce fichier contient toutes les tables et index nécessaires
-
 -- Table des fichiers avec toutes les métadonnées
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY,
