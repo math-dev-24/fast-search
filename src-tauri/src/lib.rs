@@ -65,14 +65,7 @@ fn reset_data() -> Result<(), String> {
 #[tauri::command]
 fn save_paths(paths: Vec<String>, window: tauri::WebviewWindow) -> Result<(), String> {
     let mut service_repository = get_service_repository()?;
-    let current_paths = service_repository.get_all_paths()?;
-
-    service_repository.insert_paths(paths.clone())?;
-
-    let new_paths: Vec<String> = paths
-        .into_iter()
-        .filter(|path| !current_paths.contains(path))
-        .collect();
+    let new_paths = service_repository.insert_paths(paths)?;
 
     if !new_paths.is_empty() {
         scan_files_async(window, new_paths);

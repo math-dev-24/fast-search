@@ -7,7 +7,7 @@ pub trait FileRepository {
     fn new(path: &str) -> SqliteResult<Self> where Self: Sized;
     fn init(&self) -> SqliteResult<()>;
     fn insert(&mut self, files: Vec<File>) -> SqliteResult<()>;
-    fn insert_paths(&mut self, paths: Vec<String>) -> SqliteResult<()>;
+    fn insert_paths(&mut self, paths: Vec<String>) -> SqliteResult<Vec<String>>;
     fn get_stat(&self) -> SqliteResult<Stat>;
     fn get_all_types(&self) -> SqliteResult<Vec<String>>;
     fn get_all_paths(&self) -> SqliteResult<Vec<String>>;

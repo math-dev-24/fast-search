@@ -294,17 +294,27 @@ impl FileRepository for Db {
         Ok(paths)
     }
 
-    fn insert_paths(&mut self, paths: Vec<String>) -> SqliteResult<()> {
+    fn insert_paths(&mut self, new_paths: Vec<String>) -> SqliteResult<Vec<String>> {
+
+        let db_paths = self.get_all_paths()?;
+        let need_delete_paths: Vec<String> = db_paths.iter().filter(|path| !new_paths.contains(path)).cloned().collect();
+        let new_paths: Vec<String> = new_paths.iter().filter(|path| !db_paths.contains(path)).cloned().collect();
+
+        for path in &need_delete_paths {
+            self.delete_files_by_path_prefix(path)?;
+        }
 
         let tx = self.conn.transaction()?;
 
         tx.execute("DELETE FROM paths", [])?;
 
-        for path in paths {
+        for path in &new_paths {
             tx.execute("INSERT INTO paths (path) VALUES (?)", [path])?;
         }
+
         tx.commit()?;
-        Ok(())
+
+        Ok(new_paths)
     }
 
     fn get_uncontent_indexed_files(&self) -> SqliteResult<Vec<File>> {
@@ -383,6 +393,28 @@ impl Db {
         let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM types WHERE name = ? LIMIT 1)")?;
         let exists: i64 = stmt.query_row([type_name], |row| row.get(0))?;
         Ok(exists > 0)
+    }
+
+    fn path_exist(&self, path: &str) -> SqliteResult<bool> {
+        let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM paths WHERE path = ? LIMIT 1)")?;
+        let exists: i64 = stmt.query_row([path], |row| row.get(0))?;
+        Ok(exists > 0)
+    }
+
+    fn delete_files_by_path_prefix(&mut self, path_prefix: &str) -> SqliteResult<()> {
+        let tx = self.conn.transaction()?;
+        
+        // Supprimer d'abord le contenu FTS des fichiers qui commencent par le préfixe
+        tx.execute(
+            "DELETE FROM fts_content WHERE file_id IN (SELECT id FROM files WHERE path LIKE ?)",
+            [format!("{}%", path_prefix)]
+        )?;
+        
+        // Puis supprimer les fichiers
+        tx.execute("DELETE FROM files WHERE path LIKE ?", [format!("{}%", path_prefix)])?;
+        
+        tx.commit()?;
+        Ok(())
     }
 
     fn insert_type(&mut self, type_name: Vec<String>) -> SqliteResult<()> {      

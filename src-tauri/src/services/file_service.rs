@@ -46,7 +46,7 @@ impl<T: FileRepository> FileService<T> {
         self.repository.get_all_folders().map_err(|e| e.to_string())
     }
 
-    pub fn insert_paths(&mut self, paths: Vec<String>) -> Result<(), String> {
+    pub fn insert_paths(&mut self, paths: Vec<String>) -> Result<Vec<String>, String> {
         self.repository.insert_paths(paths).map_err(|e| e.to_string())
     }
 
