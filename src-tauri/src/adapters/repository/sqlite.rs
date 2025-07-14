@@ -297,7 +297,9 @@ impl FileRepository for Db {
     fn insert_paths(&mut self, new_paths: Vec<String>) -> SqliteResult<Vec<String>> {
 
         let db_paths = self.get_all_paths()?;
+
         let need_delete_paths: Vec<String> = db_paths.iter().filter(|path| !new_paths.contains(path)).cloned().collect();
+        
         let new_paths: Vec<String> = new_paths.iter().filter(|path| !db_paths.contains(path)).cloned().collect();
 
         for path in &need_delete_paths {
@@ -392,12 +394,6 @@ impl Db {
     fn type_exist(&self, type_name: &str) -> SqliteResult<bool> {
         let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM types WHERE name = ? LIMIT 1)")?;
         let exists: i64 = stmt.query_row([type_name], |row| row.get(0))?;
-        Ok(exists > 0)
-    }
-
-    fn path_exist(&self, path: &str) -> SqliteResult<bool> {
-        let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM paths WHERE path = ? LIMIT 1)")?;
-        let exists: i64 = stmt.query_row([path], |row| row.get(0))?;
         Ok(exists > 0)
     }
 
