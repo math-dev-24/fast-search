@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { darkTheme, frFR, dateFrFR, lightTheme } from 'naive-ui'
+import { darkTheme, frFR, dateFrFR } from 'naive-ui'
 import { NConfigProvider, NLayout, NLayoutHeader, NLayoutContent, NMessageProvider } from 'naive-ui'
 import { RouterView } from 'vue-router'
 import Header from './components/Header.vue'
