@@ -131,7 +131,6 @@ const openFile = () => {
     <NModal
         v-model:show="show"
         preset="card"
-        :title="`Métadonnées du fichier : ${file?.name})`"
         class="w-[90vw] max-w-4xl max-h-[90vh] overflow-y-auto"
         :mask-closable="false"
         :closable="true"
@@ -139,10 +138,9 @@ const openFile = () => {
         <div v-if="file" class="space-y-6">
             <div class="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
                 <div class="flex items-center gap-3 flex-1">
-                    <component :is="file.is_dir ? FolderOutline : DocumentOutline" class="text-2xl text-slate-400" />
+                    <component :is="file.is_dir ? FolderOutline : DocumentOutline" class="text-2xl text-slate-400 h-10 w-10" />
                     <NFlex vertical>
-                        <NText class="text-xl font-semibold">{{ file.name }}</NText>
-                        <NText class="text-sm text-gray-500">{{ file.path }}</NText>
+                        <NText class="text-xl font-bold text-white">{{ file.name }}</NText>
                     </NFlex>
                 </div>
                 <NButton @click="openFile" type="primary" size="small">

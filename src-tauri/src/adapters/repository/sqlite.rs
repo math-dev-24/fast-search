@@ -14,13 +14,19 @@ pub struct Db {
 impl FileRepository for Db {
 
     fn new(path: &str) -> SqliteResult<Db> {
-        let conn = Connection::open(path)?;        
+        let conn = Connection::open(path).map_err(|e| e.to_string()).expect("Failed to open database");        
         Ok(Self { conn })
     }
 
-    fn init(&self) -> SqliteResult<()> {
+    fn init(&self) -> SqliteResult<(), rusqlite::Error> {
         let init_sql = include_str!("../../../data/init.sql");
-        self.conn.execute_batch(init_sql)?;
+        match self.conn.execute_batch(init_sql) {
+            Ok(_) => println!("Base de données initialisée avec succès"),
+            Err(e) => {
+                println!("Erreur d'initialisation de la base: {}", e);
+                return Err(e);
+            }
+        }
         Ok(())
     }
 

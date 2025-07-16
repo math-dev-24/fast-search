@@ -128,7 +128,7 @@ fn process_entry_safe(entry: &walkdir::DirEntry) -> Option<File> {
     let is_symlink = path.is_symlink();
     
     // Extraction des informations de propriétaire (Unix/Linux)
-    let (owner, group) = extract_owner_info(&metadata);
+    let (owner, group) = (None, None);
     
     // Détermination du type MIME
     let mime_type = determine_mime_type(path);
@@ -267,6 +267,7 @@ fn is_hidden_file(path: &Path) -> bool {
         if let Ok(metadata) = fs::metadata(path) {
             return metadata.file_attributes() & 0x2 != 0; // FILE_ATTRIBUTE_HIDDEN
         }
+        false
     }
     
     #[cfg(not(target_os = "windows"))]
@@ -298,28 +299,6 @@ fn is_system_file(path: &Path) -> bool {
     path_str.contains("/sys/") ||
     path_str.contains(".system") ||
     path_str.contains(".sys")
-}
-
-fn extract_owner_info(metadata: &fs::Metadata) -> (Option<String>, Option<String>) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        
-        // Sur Unix, on peut essayer de récupérer les noms d'utilisateur et de groupe
-        // Note: Cette implémentation est simplifiée, en production vous pourriez
-        // utiliser une bibliothèque comme `users` pour une meilleure gestion
-        let uid = metadata.uid();
-        let gid = metadata.gid();
-        
-        // Pour l'instant, on retourne les IDs numériques
-        (Some(uid.to_string()), Some(gid.to_string()))
-    }
-    
-    #[cfg(not(unix))]
-    {
-        // Sur Windows, ces informations ne sont pas facilement accessibles
-        (None, None)
-    }
 }
 
 fn determine_mime_type(path: &Path) -> Option<String> {

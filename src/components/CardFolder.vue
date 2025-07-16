@@ -6,7 +6,6 @@ import { formatPath } from '../shared/pathFormat';
 
 defineProps<{
     file: File;
-    showPath: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -34,7 +33,7 @@ const emit = defineEmits<{
                     {{ file.name }}
                 </NText>
                 
-                <NText v-if="showPath" class="block overflow-hidden text-ellipsis whitespace-nowrap leading-tight text-xs text-gray-500" depth="3">
+                <NText class="block overflow-hidden text-ellipsis whitespace-nowrap leading-tight text-xs text-gray-500" depth="3">
                     {{ formatPath(file.path) }}
                 </NText>
             </div>

@@ -28,8 +28,7 @@
                         <NGi v-for="file in searchStore.filterResult.filter(file => file.is_dir).slice(0, maxFolders)" :key="file.name">
                             <CardFolder 
                                 :file="file" 
-                                @openFile="searchStore.openFile" 
-                                :showPath="searchStore.showPath" 
+                                @openFile="searchStore.openFile"
                             />
                         </NGi>
                     </NGrid>
@@ -52,7 +51,6 @@
                             @openFile="searchStore.openFile" 
                             @copyPath="searchStore.copyPath"
                             @previewFile="handlePreviewFile"
-                            :showPath="searchStore.showPath"
                         />
                     </div>
                     <div v-if="searchStore.filterResult.filter(file => !file.is_dir).length > maxFiles" class="flex justify-center items-center mt-6 w-full">

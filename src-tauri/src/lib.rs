@@ -10,6 +10,7 @@ use utils::{generator::get_service_repository, scan::scan_files_async, indexer::
 use services::content_indexer_service::ContentIndexerService;
 use std::env;
 use std::process::Command;
+use std::path::PathBuf;
 
 
 #[tauri::command]
@@ -197,14 +198,15 @@ fn open_file_in_explorer(path: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let service_repository = get_service_repository()
-        .expect("Failed to initialize service repository");
-    service_repository.init()
-        .expect("Failed to initialize database");
+    println!("Starting Tauri application");
+    
+    let service_repository = get_service_repository().expect("Failed to initialize service repository");
+    service_repository.init().expect("Failed to initialize database");
 
     let builder = tauri::Builder::default();
     let builder = builder.plugin(tauri_plugin_opener::init());
     let builder = builder.plugin(tauri_plugin_dialog::init());
+    
     builder.invoke_handler(tauri::generate_handler![
         get_stat, 
         sync_files_and_folders, 

@@ -7,7 +7,6 @@ import { formatPath } from '../shared/pathFormat';
 
 const props = defineProps<{
     file: File;
-    showPath: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -76,7 +75,7 @@ const fileIcon = computed(() => getFileIcon(props.file.name));
                     {{ file.name }}
                 </NText>
                 
-                <NText v-if="showPath" class="flex items-center overflow-hidden text-ellipsis whitespace-nowrap leading-tight text-xs text-gray-500" depth="3">
+                <NText class="flex items-center overflow-hidden text-ellipsis whitespace-nowrap leading-tight text-xs text-gray-500" depth="3">
                     <NIcon size="12" class="mr-1">
                         <FolderOpen />
                     </NIcon>
