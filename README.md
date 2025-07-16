@@ -313,7 +313,7 @@ npm run tauri build  # Build production
 - [ ] Prévisualisation de plus de types de fichiers
 - [X] Export des résultats de recherche
    - [X] Format CSV
-- [ ] Thèmes sombre/clair
+- [X] Thèmes sombre/clair
 - [ ] Raccourcis clavier
 - [ ] Recherche dans le contenu des fichiers
 - [ ] Indexation en arrière-plan

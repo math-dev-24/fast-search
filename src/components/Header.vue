@@ -6,9 +6,15 @@ import Setting from './Setting.vue';
 import SyncDetails from './SyncDetails.vue';
 import SyncIndicator from './SyncIndicator.vue';
 import { useSync } from '../composables/useSync';
+import ColorMode from './ColorMode.vue';
+import { darkTheme } from 'naive-ui';
 
 const router = useRouter();
 const routes = router.getRoutes();
+
+defineProps<{
+    theme: typeof darkTheme | null
+}>()
 
 const { 
     inSync, 
@@ -21,6 +27,10 @@ const {
     processDetails,
     startSync
 } = useSync();
+
+
+const emit = defineEmits(['toggle-theme'])
+
 </script>
 
 <template>
@@ -29,7 +39,7 @@ const {
             <h1 class="text-2xl font-bold">
                 Fast Search
             </h1>
-            <NSpace align="center">
+            <NSpace align="center" :size="14">
                 <RouterLink v-for="route in routes" :key="route.path" :to="route.path" custom
                     v-slot="{ navigate, isActive }">
                     <NButton :class="{ 'active': isActive }" @click="navigate">
@@ -37,7 +47,8 @@ const {
                     </NButton>
                 </RouterLink>
                 
-                <!-- Bouton de sync avec popover d'info détaillé -->
+                <ColorMode @toggle-theme="emit('toggle-theme')" :theme="theme" />
+
                 <NPopover trigger="hover" :disabled="!inSync && !hasError && !hasSuccess" placement="bottom-end">
                     <template #trigger>
                         <NButton 
@@ -73,8 +84,7 @@ const {
                 <Setting :inSync="inSync" />
             </NSpace>
         </NSpace>
-        
-        <!-- Indicateur de synchronisation -->
+
         <SyncIndicator
             :inSync="inSync"
             :hasError="hasError.length > 0"
