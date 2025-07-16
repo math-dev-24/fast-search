@@ -56,14 +56,11 @@ impl ReaderService {
                 "txt" | "md" | "json" | "log" => {
                     Box::new(TextReader::new())
                 },
-                
-                // Par défaut, utiliser le TextReader
                 _ => {
                     Box::new(TextReader::new())
                 }
             }
         } else {
-            // Pas d'extension, utiliser le TextReader par défaut
             Box::new(TextReader::new())
         }
     }
@@ -75,21 +72,12 @@ impl ReaderService {
             let ext_str = extension.to_string_lossy().to_lowercase();
             
             let supported_extensions = [
-                // Fichiers de code
                 "js", "ts", "jsx", "tsx", "py", "java", "cpp", "c", "h", "hpp", 
                 "rs", "go", "php", "rb", "pl", "sh", "sql", "html", "htm", "css",
                 "xml", "yaml", "yml", "toml", "ini", "cfg", "conf",
-                
-                // Fichiers CSV
                 "csv", "tsv",
-                
-                // Fichiers PDF
                 "pdf",
-                
-                // Fichiers Word
                 "docx", "doc",
-                
-                // Fichiers texte simples
                 "txt", "md", "json", "log"
             ];
             
