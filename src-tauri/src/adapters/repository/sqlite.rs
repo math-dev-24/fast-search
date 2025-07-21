@@ -34,9 +34,9 @@ impl FileRepository for Db {
         &self,
         query: &SearchQuery,
     ) -> SqliteResult<Vec<File>> {
-        let mut conditions = Vec::new();
+        let mut conditions: Vec<String> = Vec::new();
         let mut params: Vec<String> = Vec::new();
-        let mut extra_conditions = Vec::new();
+        let mut extra_conditions: Vec<String> = Vec::new();
     
         // Recherche textuelle dans le nom ou le chemin
         if !query.text.trim().is_empty() {
@@ -44,7 +44,7 @@ impl FileRepository for Db {
                 // La recherche dans le contenu sera gérée par la jointure FTS
             } else {
                 // Recherche dans le nom et le chemin
-                conditions.push("(LOWER(name) LIKE LOWER(?) OR LOWER(path) LIKE LOWER(?))");
+                conditions.push("(LOWER(name) LIKE LOWER(?) OR LOWER(path) LIKE LOWER(?))".to_string());
                 params.push(format!("%{}%", query.text));
                 params.push(format!("%{}%", query.text));
             }
@@ -52,13 +52,13 @@ impl FileRepository for Db {
     
         // Filtres de type de fichier
         if query.filters.is_dir {
-            conditions.push("is_dir = 1");
+            conditions.push("is_dir = 1".to_string());
         }
     
         // Extensions de fichiers
         if !query.filters.file_types.is_empty() {
             let placeholders = query.filters.file_types.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-            extra_conditions.push(format!("file_type IN ({})", placeholders));
+            conditions.push(format!("file_type IN ({})", placeholders));
             params.extend(query.filters.file_types.iter().cloned());
         }
     
@@ -80,7 +80,7 @@ impl FileRepository for Db {
                 i64::MAX
             };
     
-            conditions.push("size >= ? AND size <= ?");
+            conditions.push("size >= ? AND size <= ?".to_string());
             params.push(min.to_string());
             params.push(max.to_string());
         }
@@ -95,9 +95,9 @@ impl FileRepository for Db {
             };
     
             if query.filters.date_mode == DateMode::Create {
-                conditions.push("created_at >= ? AND created_at <= ?");
+                conditions.push("created_at >= ? AND created_at <= ?".to_string());
             } else {
-                conditions.push("last_modified >= ? AND last_modified <= ?");
+                conditions.push("last_modified >= ? AND last_modified <= ?".to_string());
             }
     
             params.push(min.to_string());
@@ -107,17 +107,21 @@ impl FileRepository for Db {
         // Recherche par pattern de chemin
         if let Some(path_pattern) = &query.path_pattern {
             if !path_pattern.trim().is_empty() {
-                conditions.push("path LIKE ?");
+                conditions.push("path LIKE ?".to_string());
                 params.push(format!("%{}%", path_pattern));
             }
         }
     
         // Combine toutes les conditions
-        conditions.extend(extra_conditions.iter().map(|s| s.as_str()));
-        let where_clause = if conditions.is_empty() {
+        let all_conditions: Vec<String> = conditions.into_iter()
+            .map(|s| s.to_string())
+            .chain(extra_conditions.into_iter())
+            .collect();
+        
+        let where_clause = if all_conditions.is_empty() {
             "1=1".to_string()
         } else {
-            conditions.join(" AND ")
+            all_conditions.join(" AND ")
         };
     
         // Construction de l'ORDER BY avec COLLATE NOCASE pour les chaînes
