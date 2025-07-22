@@ -10,7 +10,7 @@ use utils::{file::open_file_in_explorer, generator::get_service_repository, scan
 
 #[tauri::command]
 fn open_file(path: String) -> Result<(), String> {
-    open_file_in_explorer(path).expect("Failed to open file");
+    open_file_in_explorer(path)?;
     Ok(())
 }
 
@@ -39,6 +39,8 @@ fn get_all_folders() -> Result<Vec<String>, String> {
 fn get_all_paths() -> Result<Vec<String>, String> {
     let service_repository = get_service_repository()?;
     let paths = service_repository.get_all_paths()?;
+
+    println!("{:?}", paths);
     Ok(paths)
 }
 
@@ -110,7 +112,7 @@ fn diagnose_scan_issues(paths: Vec<String>) -> Result<Vec<String>, String> {
         let mut file_count = 0u64;
         
         if let Ok(entries) = std::fs::read_dir(path_obj) {
-            for entry in entries.take(1000) { // Limiter à 1000 entrées pour la performance
+            for entry in entries.take(1000) {
                 if let Ok(entry) = entry {
                     if let Ok(metadata) = entry.metadata() {
                         if metadata.is_file() {
