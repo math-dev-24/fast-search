@@ -5,7 +5,6 @@ mod utils;
 mod ports;
 
 use entities::{file::File, stat::Stat, search::SearchQuery};
-use tauri::{async_runtime, Manager};
 use utils::{file::open_file_in_explorer, generator::get_service_repository, scan::scan_files_async, indexer::index_content_async};
 
 #[tauri::command]
@@ -163,21 +162,6 @@ pub fn run() {
         get_all_paths,
         diagnose_scan_issues
     ])
-    .setup(|app| {
-        let window = app.get_webview_window("main")
-            .expect("Failed to get main window");
-    
-        async_runtime::spawn(async move {
-            if let Ok(service_repository) = get_service_repository() {
-                if let Ok(paths) = service_repository.get_all_paths() {
-                    scan_files_async(window.clone(), paths);
-                    index_content_async(window);
-                }
-            }
-        });
-        
-        Ok(())
-    })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
