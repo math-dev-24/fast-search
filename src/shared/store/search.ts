@@ -119,7 +119,7 @@ export const useSearchStore = defineStore('search', {
         },
 
         async openFile(path: string) {
-            await invoke('open_file_in_explorer', { path: path });
+            await invoke('open_file', { path: path });
         },
 
         async copyPath(path: string) {

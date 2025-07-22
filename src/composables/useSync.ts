@@ -2,9 +2,17 @@ import { ref, onMounted, onUnmounted, computed } from "vue";
 import { invoke } from "@tauri-apps/api/core";  
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { AlertCircle, CheckmarkCircle, SyncCircle, FolderOutline, DocumentTextOutline } from "@vicons/ionicons5";
-import { Phase } from "../types";
+import {
+  ProcessState,
+  ScanProgressPayload,
+  ScanCollectedPayload,
+  InsertProgressPayload,
+  ScanFinishedPayload,
+  IndexProgressPayload,
+  IndexFinishedPayload, ScanDetails
+} from "../types";
 
-// Constantes pour les événements (cohérentes avec le backend)
+
 const EVENTS = {
   SCAN: {
     STARTED: "scan_files_started",
@@ -25,55 +33,8 @@ const EVENTS = {
   }
 } as const;
 
-// Types pour les payloads d'événements
-interface ScanProgressPayload {
-  progress: number;
-  message: string;
-  current_path: string;
-}
-
-interface ScanCollectedPayload {
-  total: number;
-  message: string;
-}
-
-interface InsertProgressPayload {
-  progress: number;
-  processed: number;
-  total: number;
-}
-
-interface ScanFinishedPayload {
-  total: number;
-  message: string;
-}
-
-interface IndexProgressPayload {
-  progress: number;
-  message: string;
-  processed: number;
-  total: number;
-}
-
-interface IndexFinishedPayload {
-  total: number;
-  message: string;
-}
-
-interface ProcessState {
-  isActive: boolean;
-  progress: number;
-  message: string;
-  currentPath: string;
-  total: number;
-  processed: number;
-  phase: Phase;
-  error: string;
-  success: boolean;
-}
 
 export const useSync = () => {
-  // États séparés pour chaque processus
   const scanState = ref<ProcessState>({
     isActive: false,
     progress: 0,
@@ -148,7 +109,7 @@ export const useSync = () => {
     return `Synchronisation en cours (${activeProcesses.join(", ")})`;
   });
 
-  const processDetails = computed(() => {
+  const processDetails = computed((): ScanDetails[] => {
     const details = [];
     
     if (scanState.value.isActive || scanState.value.success) {
@@ -240,7 +201,7 @@ export const useSync = () => {
 
       // Ajout d'un timeout pour éviter les blocages
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Timeout: Le scan prend trop de temps")), 600000); // 10 minutes
+        setTimeout(() => reject(new Error("Timeout: Le scan prend trop de temps")), 6000000);
       });
 
       const syncPromise = Promise.all([
@@ -280,7 +241,7 @@ export const useSync = () => {
         await listen(EVENTS.SCAN.PROGRESS, (event: any) => {
           try {
             const payload = event.payload as ScanProgressPayload;
-            scanState.value.progress = payload.progress;
+            scanState.value.progress = payload.progress * 100; // Convert from 0-1 to 0-100
             scanState.value.message = payload.message;
             scanState.value.currentPath = payload.current_path;
             scanState.value.phase = "collecting";
@@ -308,7 +269,7 @@ export const useSync = () => {
         await listen(EVENTS.SCAN.INSERT_PROGRESS, (event: any) => {
           try {
             const payload = event.payload as InsertProgressPayload;
-            scanState.value.progress = payload.progress;
+            scanState.value.progress = payload.progress * 100; // Convert from 0-1 to 0-100
             scanState.value.processed = payload.processed;
             scanState.value.total = payload.total;
             scanState.value.phase = "inserting";
@@ -369,7 +330,7 @@ export const useSync = () => {
         await listen(EVENTS.INDEX.PROGRESS, (event: any) => {
           try {
             const payload = event.payload as IndexProgressPayload;
-            indexState.value.progress = payload.progress;
+            indexState.value.progress = payload.progress * 100; // Convert from 0-1 to 0-100
             indexState.value.message = payload.message;
             indexState.value.processed = payload.processed;
             indexState.value.total = payload.total;

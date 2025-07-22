@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { File } from '../types';
+import type { File } from '../../types';
 import { FileTrayFull, FolderOpen, Open, CopyOutline, EyeOutline } from '@vicons/ionicons5';
 import { NIcon, NCard, NText, NButton, NFlex } from 'naive-ui';
-import { formatPath } from '../shared/pathFormat';
+import { formatPath } from '../../shared/pathFormat.ts';
 
 const props = defineProps<{
     file: File;

@@ -2,7 +2,7 @@
 import { darkTheme, frFR, dateFrFR } from 'naive-ui'
 import { NConfigProvider, NLayout, NLayoutHeader, NLayoutContent, NMessageProvider } from 'naive-ui'
 import { RouterView } from 'vue-router'
-import Header from './components/Header.vue'
+import Header from './components/base/Header.vue'
 import { ref } from 'vue'
 
 const theme = ref<typeof darkTheme | null>(darkTheme)

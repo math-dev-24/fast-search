@@ -2,11 +2,11 @@
 import { useRouter } from 'vue-router';
 import { NSpace, NButton, NIcon, NPopover } from 'naive-ui';
 import { RouterLink } from 'vue-router';
-import Setting from './Setting.vue';
-import SyncDetails from './SyncDetails.vue';
-import SyncIndicator from './SyncIndicator.vue';
-import { useSync } from '../composables/useSync';
-import ColorMode from './ColorMode.vue';
+import Setting from '../Setting.vue';
+import Details from '../sync/Details.vue';
+import Indicator from '../sync/Indicator.vue';
+import { useSync } from '../../composables/useSync.ts';
+import ColorMode from '../ColorMode.vue';
 import { darkTheme } from 'naive-ui';
 
 const router = useRouter();
@@ -29,7 +29,9 @@ const {
 } = useSync();
 
 
-const emit = defineEmits(['toggle-theme'])
+const emit = defineEmits<{
+  (e: 'toggle-theme'): void
+}>()
 
 </script>
 
@@ -67,9 +69,8 @@ const emit = defineEmits(['toggle-theme'])
                             Sync
                         </NButton>
                     </template>
-                    
-                    <!-- Utilisation du composant SyncDetails -->
-                    <SyncDetails
+
+                    <Details
                         :inSync="inSync"
                         :hasError="hasError.length > 0"
                         :hasSuccess="hasSuccess"
@@ -85,7 +86,7 @@ const emit = defineEmits(['toggle-theme'])
             </NSpace>
         </NSpace>
 
-        <SyncIndicator
+        <Indicator
             :inSync="inSync"
             :hasError="hasError.length > 0"
             :hasSuccess="hasSuccess"

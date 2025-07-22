@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NModal, NButton, NText, NDescriptions, NDescriptionsItem, NTag, NSpace, NDivider, NFlex } from 'naive-ui';
+import { NModal, NButton, NText, NDescriptions, NDescriptionsItem, NTag, NSpace, NDivider, NFlex, NIcon } from 'naive-ui';
 import { Eye, FolderOutline, DocumentOutline, InformationCircleOutline } from '@vicons/ionicons5';
 import type { File } from '../types';
 

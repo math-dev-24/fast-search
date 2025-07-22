@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { File } from '../types';
+import type { File } from '../../types';
 import { FolderOpen } from '@vicons/ionicons5';
 import { NIcon, NCard, NText } from 'naive-ui';
-import { formatPath } from '../shared/pathFormat';
+import { formatPath } from '../../shared/pathFormat.ts';
 
 defineProps<{
     file: File;

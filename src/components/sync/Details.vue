@@ -1,18 +1,8 @@
 <script setup lang="ts">
 import { NCard, NProgress, NText, NIcon, NFlex, NAlert, NSpace } from 'naive-ui';
 import {AlertCircle, CheckmarkCircle } from '@vicons/ionicons5';
+import {ScanDetails} from "../../types";
 
-interface ProcessDetail {
-  name: string;
-  icon: any;    
-  isActive: boolean;
-  progress: number;
-  message: string;
-  currentPath: string;
-  phase: string;
-  error: string;
-  success: boolean;
-}
 
 interface Props {
   inSync: boolean;
@@ -21,7 +11,7 @@ interface Props {
   overallProgress: number;
   progressStatus: 'info' | 'success' | 'error' | 'warning';
   syncSummary: string;
-  processDetails: ProcessDetail[];
+  processDetails: ScanDetails[];
   statusIcon: any;
 }
 

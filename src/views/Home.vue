@@ -26,7 +26,7 @@
                     </NText>
                     <NGrid :cols="4" :x-gap="4" :y-gap="4">
                         <NGi v-for="file in searchStore.filterResult.filter(file => file.is_dir).slice(0, maxFolders)" :key="file.name">
-                            <CardFolder 
+                            <Folder
                                 :file="file" 
                                 @openFile="searchStore.openFile"
                             />
@@ -44,11 +44,11 @@
                         Fichiers ({{ searchStore.filterResult.filter(file => !file.is_dir).length }})
                     </NText>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        <CardFile 
+                        <CardFile
                             v-for="file in searchStore.filterResult.filter(file => !file.is_dir).slice(0, maxFiles)"
                             :key="file.name" 
                             :file="file"
-                            @openFile="searchStore.openFile" 
+                            @openFile="handleOpenFile"
                             @copyPath="searchStore.copyPath"
                             @previewFile="handlePreviewFile"
                         />
@@ -75,10 +75,10 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { NSpace, NGrid, NGi, NDivider, NStatistic, NCard, NText, NEmpty, NButton, NNumberAnimation } from 'naive-ui';
+import { NSpace, NGrid, NGi, NDivider, NStatistic, NCard, NText, NEmpty, NButton, NNumberAnimation, useMessage } from 'naive-ui';
 import Search from '../components/Search.vue';
-import CardFile from '../components/CardFile.vue';
-import CardFolder from '../components/CardFolder.vue';
+import CardFile from '../components/card/File.vue';
+import Folder from '../components/card/Folder.vue';
 import Filter from '../components/Filter.vue';
 import FileDetail from '../components/FileDetail.vue';
 import { useSearchStore } from '../shared/store/search';
@@ -104,6 +104,13 @@ watch(() => searchStore.filterResult, () => {
 function handlePreviewFile(file: File) {
     detailFile.value = file;
     showDetail.value = true;
+}
+
+function handleOpenFile(path: string) {
+  const message = useMessage();
+  searchStore.openFile(path);
+  message.success('Le dossier va être ouvert (cela peu prendre quelque secondes)');
+
 }
 
 </script>
