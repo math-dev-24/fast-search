@@ -181,27 +181,6 @@ src-tauri/src/
 - `reset_data()` - Réinitialise la base de données
 - `get_all_folders()` - Récupère tous les dossiers
 
-## Structure de la base de données
-
-```sql
--- Table des fichiers
-CREATE TABLE files (
-    id INTEGER PRIMARY KEY,
-    path TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL,
-    file_type TEXT,
-    size INTEGER,
-    last_modified TEXT,
-    created_at TEXT
-);
-
--- Table des types
-CREATE TABLE types (
-   id INTEGER PRIMARY KEY,
-   name TEXT NOT NULL UNIQUE
-)
-```
-
 ## Fonctionnalités avancées
 
 ### Prévisualisation de fichiers
@@ -302,31 +281,26 @@ npm run tauri build  # Build production
 - [X] Filtres avancés par poids, date de création/modification
    - [X] Par poids
    - [X] Par date de création
-   - [ ] Par date de modification (OK mais Bug)
+   - [X] Par date de modification
 - [ ] Historique des recherches - enregister une config
    - [ ] Table history/config
    - [ ] Front save config
    - [ ] slide avec liste des configs
 - [ ] Détection automatique de nouveaux fichiers
-- [X] Synchronisation automatique au démarrage de manière asynchrone
-- [ ] Meilleur gestion des prévisualisation
-- [ ] Prévisualisation de plus de types de fichiers
+- [ ] Prévisualiser les fichiers (PDF, Word, image, ...)
 - [X] Export des résultats de recherche
    - [X] Format CSV
 - [X] Thèmes sombre/clair
 - [ ] Raccourcis clavier
-- [ ] Recherche dans le contenu des fichiers
+- [X] Recherche dans le contenu des fichiers
 - [ ] Indexation en arrière-plan
    - [X] Traitement en générale
-   - [X] Au démarrage
    - [ ] Lors d'un nouveau fichier 
 - [X] Progress bar avancement traitement des fichiers
 
 ### Améliorations techniques
 - [ ] Tests unitaires et d'intégration
 - [ ] Optimisation des performances
-- [ ] Support multi-plateforme amélioré
-- [ ] Système de plugins
 
 ## Licence
 
