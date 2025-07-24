@@ -241,7 +241,7 @@ export const useSync = () => {
         await listen(EVENTS.SCAN.PROGRESS, (event: any) => {
           try {
             const payload = event.payload as ScanProgressPayload;
-            scanState.value.progress = payload.progress * 100; // Convert from 0-1 to 0-100
+            scanState.value.progress = payload.progress;
             scanState.value.message = payload.message;
             scanState.value.currentPath = payload.current_path;
             scanState.value.phase = "collecting";
@@ -269,7 +269,7 @@ export const useSync = () => {
         await listen(EVENTS.SCAN.INSERT_PROGRESS, (event: any) => {
           try {
             const payload = event.payload as InsertProgressPayload;
-            scanState.value.progress = payload.progress * 100; // Convert from 0-1 to 0-100
+            scanState.value.progress = payload.progress;
             scanState.value.processed = payload.processed;
             scanState.value.total = payload.total;
             scanState.value.phase = "inserting";
