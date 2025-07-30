@@ -1,6 +1,7 @@
 use crate::ports::reader::Reader;
 use std::fs;
 use std::path::Path;
+use crate::entities::file::File;
 
 pub struct WordReader;
 
@@ -9,17 +10,17 @@ impl WordReader {
         Self
     }
 
-    fn extract_text_from_docx(&self, _path: &str) -> Result<String, String> {
+    fn extract_text_from_docx(&self, _file: &File) -> Result<String, String> {
         Err("Lecture des fichiers Word non encore implémentée".to_string())
     }
 }
 
 impl Reader for WordReader {
-    fn read(&self, path: &str) -> Result<String, String> {
-        let file_path = Path::new(path);
+    fn read(&self, file: &File) -> Result<String, String> {
+        let file_path = Path::new(&file.path);
         
         if !file_path.exists() || !file_path.is_file() {
-            return Err(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", path));
+            return Err(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", file));
         }
 
         // Vérifier la taille du fichier (limite à 20MB pour les fichiers Word)
@@ -31,7 +32,7 @@ impl Reader for WordReader {
         }
 
         // Extraire le texte du document Word
-        self.extract_text_from_docx(path)
+        self.extract_text_from_docx(file)
     }
 }
 

@@ -1,4 +1,5 @@
+use crate::entities::file::File;
 
 pub trait Reader {
-    fn read(&self, path: &str) -> Result<String, String>;
+    fn read(&self, file: &File) -> Result<String, String>;
 }

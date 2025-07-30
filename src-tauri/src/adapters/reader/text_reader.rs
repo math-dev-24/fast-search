@@ -2,6 +2,7 @@ use crate::ports::reader::Reader;
 use std::fs;
 use std::io::Read;
 use std::path::Path;
+use crate::entities::file::File;
 
 pub struct TextReader;
 
@@ -12,11 +13,11 @@ impl TextReader {
 }
 
 impl Reader for TextReader {
-    fn read(&self, path: &str) -> Result<String, String> {
-        let file_path = Path::new(path);
+    fn read(&self, file: &File) -> Result<String, String> {
+        let file_path = Path::new(&file.path);
         
         if !file_path.exists() || !file_path.is_file() {
-            return Err(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", path));
+            return Err(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", file));
         }
 
         // Vérifier la taille du fichier (limite à 10MB pour les fichiers texte)

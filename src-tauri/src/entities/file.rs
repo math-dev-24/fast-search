@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::SystemTime};
+use std::{path::PathBuf, time::SystemTime, fmt::{Display, Formatter}};
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -28,4 +28,11 @@ pub struct File {
     pub word_count: Option<u32>,
     pub checksum: Option<String>,
     pub is_encrypted: bool,
+}
+
+impl Display for File {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "File {{ path: {}, name: {}, is_dir: {}, file_type: {:?}, size: {:?}, last_modified: {:?}, created_at: {:?}, accessed_at: {:?}, is_indexed: {}, content_indexed: {}, is_indexable: {}, is_hidden: {}, is_readonly: {}, is_system: {}, is_executable: {}, is_symlink: {}, permissions: {:?}, owner: {:?}, group: {:?}, mime_type: {:?}, encoding: {:?}, line_count: {:?}, word_count: {:?}, checksum: {:?}, is_encrypted: {} }}",
+            self.path.display(), self.name, self.is_dir, self.file_type, self.size, self.last_modified, self.created_at, self.accessed_at, self.is_indexed, self.content_indexed, self.is_indexable, self.is_hidden, self.is_readonly, self.is_system, self.is_executable, self.is_symlink, self.permissions, self.owner, self.group, self.mime_type, self.encoding, self.line_count, self.word_count, self.checksum, self.is_encrypted)
+    }
 }

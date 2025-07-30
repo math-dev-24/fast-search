@@ -15,16 +15,14 @@ impl ReaderService {
     }
 
     pub fn read(&mut self, file: &File) -> Result<String, String> {
-        let file_path_str = file.path.to_string_lossy();
-        
         // Sélectionner le reader approprié basé sur l'extension du fichier
-        self.reader = Self::get_reader_for_file(&file_path_str);
+        self.reader = Self::get_reader_for_file(&file);
         
-        self.reader.read(&file_path_str)
+        self.reader.read(&file)
     }
 
-    fn get_reader_for_file(file_path: &str) -> Box<dyn Reader> {
-        let path = Path::new(file_path);
+    fn get_reader_for_file(file: &File) -> Box<dyn Reader> {
+        let path = Path::new(&file.path);
         
         if let Some(extension) = path.extension() {
             let ext_str = extension.to_string_lossy().to_lowercase();
@@ -65,8 +63,8 @@ impl ReaderService {
         }
     }
 
-    pub fn can_read_file(file_path: &str) -> bool {
-        let path = Path::new(file_path);
+    pub fn can_read_file(file: &File) -> bool {
+        let path = Path::new(&file.path);
         
         if let Some(extension) = path.extension() {
             let ext_str = extension.to_string_lossy().to_lowercase();

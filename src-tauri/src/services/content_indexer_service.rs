@@ -15,17 +15,15 @@ impl ContentIndexerService {
     }
 
     pub fn index_file_content(&mut self, file: &File) -> Result<String, String> {
-        let file_path_str = file.path.to_string_lossy();
-        
-        if !ReaderService::can_read_file(&file_path_str) {
-            return Err(format!("Type de fichier non supporté: {}", file.path.display()));
+        if !ReaderService::can_read_file(&file) {
+            return Err(format!("Type de fichier non supporté: {}", file));
         }
 
         self.reader_service.read(file)
     }
 
-    pub fn can_index_file(&self, file_path: &str) -> bool {
-        ReaderService::can_read_file(file_path)
+    pub fn can_index_file(&self, file: &File) -> bool {
+        ReaderService::can_read_file(file)
     }
 }
 

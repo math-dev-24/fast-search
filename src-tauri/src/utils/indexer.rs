@@ -6,7 +6,6 @@ use tauri::WebviewWindow;
 use crate::entities::scan::{IndexProgress, IndexFinished};
 use crate::entities::file::File;
 use crate::services::content_indexer_service::ContentIndexerService;
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use crate::services::file_service::FileService;
@@ -64,17 +63,17 @@ impl ProgressTracker {
 
 
 
-fn can_index_file(file_path: &Path) -> bool {
-    if !file_path.exists() || !file_path.is_file() {
-        println!("NON INDEXABLE (n'existe pas ou n'est pas un fichier): {}", file_path.display());
+fn can_index_file(file: &File) -> bool {
+    if !file.path.exists() || !file.path.is_file() {
+        println!("NON INDEXABLE (n'existe pas ou n'est pas un fichier): {}", file.path.display());
         return false;
     }
     
     let content_indexer = ContentIndexerService::new();
-    let can_index = content_indexer.can_index_file(file_path.to_string_lossy().as_ref());
+    let can_index = content_indexer.can_index_file(file);
     
     if !can_index {
-        println!("NON INDEXABLE (extension non supportée): {}", file_path.display());
+        println!("NON INDEXABLE (extension non supportée): {}", file.path.display());
     }
     
     can_index
@@ -87,7 +86,7 @@ async fn process_single_file(
     let mut repo = service_repository.lock()
         .map_err(|e| format!("Erreur d'accès au repository: {}", e))?;
     
-    if !can_index_file(&file.path) {
+    if !can_index_file(&file) {
         repo.update_file_index_status(&file, String::new(), false)
             .map_err(|e| format!("Erreur mise à jour fichier non indexable: {}", e))?;
         return Ok(());

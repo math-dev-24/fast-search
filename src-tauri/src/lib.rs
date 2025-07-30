@@ -4,8 +4,14 @@ mod entities;
 mod utils;
 mod ports;
 
-use entities::{file::File, stat::Stat, search::SearchQuery};
+use std::sync::Arc;
+
+use adapters::ai::lm_studio::LmStudio;
+use services::ai_service::AiService;
 use utils::{file::open_file_in_explorer, generator::get_service_repository, scan::scan_files_async, indexer::index_content_async};
+use entities::{file::File, stat::Stat, search::SearchQuery};
+
+const LOCAL_URL_AI: &str = "http://192.168.108.172:1234";
 
 #[tauri::command]
 fn open_file(path: String) -> Result<(), String> {
@@ -38,8 +44,6 @@ fn get_all_folders() -> Result<Vec<String>, String> {
 fn get_all_paths() -> Result<Vec<String>, String> {
     let service_repository = get_service_repository()?;
     let paths = service_repository.get_all_paths()?;
-
-    println!("{:?}", paths);
     Ok(paths)
 }
 
@@ -71,9 +75,27 @@ fn save_paths(paths: Vec<String>, window: tauri::WebviewWindow) -> Result<(), St
 }
 
 #[tauri::command]
-fn ai_search(natural_query: String) -> Result<SearchQuery, String> {
-    println!("{}", natural_query);
-    Ok(SearchQuery::default())
+async fn ai_search(natural_query: String, model: String) -> Result<SearchQuery, String> {
+    let ai_adapter = LmStudio::new(Some(LOCAL_URL_AI.to_string()), Some(model));
+    let ai_service = AiService::new(Arc::new(ai_adapter));
+    let search_query = ai_service.generate(&natural_query).await.unwrap();
+    Ok(search_query)
+}
+
+#[tauri::command]
+async fn ai_health_check(model: String) -> Result<bool, String> {
+    let ai_adapter = LmStudio::new(Some(LOCAL_URL_AI.to_string()), Some(model));
+    let ai_service = AiService::new(Arc::new(ai_adapter));
+    let health_check = ai_service.health_check().await.unwrap();
+    Ok(health_check)
+}
+
+#[tauri::command]
+async fn ai_list_models() -> Result<Vec<String>, String> {
+    let ai_adapter = LmStudio::new(Some(LOCAL_URL_AI.to_string()), None);
+    let ai_service = AiService::new(Arc::new(ai_adapter));
+    let models = ai_service.list_models().await.unwrap();
+    Ok(models)
 }
 
 #[tauri::command]
@@ -167,7 +189,9 @@ pub fn run() {
         save_paths,
         get_all_paths,
         diagnose_scan_issues,
-        ai_search
+        ai_search,
+        ai_health_check,
+        ai_list_models
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

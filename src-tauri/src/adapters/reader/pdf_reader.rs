@@ -2,6 +2,7 @@ use crate::ports::reader::Reader;
 use std::fs;
 use std::path::Path;
 use lopdf::Document;
+use crate::entities::file::File;
 
 pub struct PdfReader;
 
@@ -10,8 +11,8 @@ impl PdfReader {
         Self
     }
 
-    fn extract_text_from_pdf(&self, path: &str) -> Result<String, String> {
-        let doc = Document::load(path)
+    fn extract_text_from_pdf(&self, file: &File) -> Result<String, String> {
+        let doc = Document::load(&file.path)
             .map_err(|e| format!("Erreur lors du chargement du document PDF: {}", e))?;
         
         let mut text_content = String::new();
@@ -43,11 +44,11 @@ impl PdfReader {
 }
 
 impl Reader for PdfReader {
-    fn read(&self, path: &str) -> Result<String, String> {
-        let file_path = Path::new(path);
+    fn read(&self, file: &File) -> Result<String, String> {
+        let file_path = Path::new(&file.path);
         
         if !file_path.exists() || !file_path.is_file() {
-            return Err(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", path));
+            return Err(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", file));
         }
 
         // Vérifier la taille du fichier (limite à 50MB pour les fichiers PDF)
@@ -59,7 +60,7 @@ impl Reader for PdfReader {
         }
 
         // Extraire le texte du PDF
-        self.extract_text_from_pdf(path)
+        self.extract_text_from_pdf(file)
     }
 }
 
