@@ -1,13 +1,21 @@
 <script setup lang="ts">
-import { defineModel } from 'vue';
-import { NInput, NButton, NSpace, NIcon, NTooltip } from 'naive-ui';
+import { defineModel, onMounted, ref } from 'vue';
+import { NInput, NButton, NSpace, NIcon, NTooltip, NSelect } from 'naive-ui';
 import { SearchOutline, RefreshOutline, InformationCircleOutline } from '@vicons/ionicons5';
 import type { SearchQuery } from '../types/search';
+import { invoke } from '@tauri-apps/api/core';
 
 const naturalSearch = defineModel<string>('naturalSearch', { required: true });
+const modelAI = defineModel<string>('modelAI', { required: true });
+
+const listModels = ref<string[]>([]);
+
+const emit = defineEmits<{
+    (e: 'aiSearch', query: string): void;
+}>();
 
 const aiSearch = () => {
-    console.log(naturalSearch.value);
+    emit('aiSearch', naturalSearch.value);
 }
 
 const resetSearch = () => {
@@ -20,6 +28,14 @@ defineProps<{
     query: SearchQuery;
 }>()
 
+const getListModels = async () => {
+    const models = await invoke<string[]>('ai_list_models');
+    listModels.value = models;
+}
+
+onMounted(() => {
+    getListModels();
+});
 </script>
 
 <template>
@@ -62,6 +78,8 @@ defineProps<{
                 :loading="inLoading"
             />
         </div>
+
+        <NSelect v-model:value="modelAI" :options="listModels.map(model => ({ label: model, value: model }))" />
         
         <NSpace justify="center" size="medium" class="action-buttons">
             <NButton

@@ -7,6 +7,7 @@ import { DateTime } from 'luxon';
 type SearchState = {
     query: SearchQuery;
     naturalSearch: string;
+    modelAI: string;
     mode: "search" | "ai_search";
     inLoading: boolean;
     result: File[];
@@ -36,6 +37,7 @@ export const useSearchStore = defineStore('search', {
                 path_pattern: null
             },
         naturalSearch: '',
+        modelAI: '',
         mode: "search",
         inLoading: false,
         isLoaded: false,
@@ -85,7 +87,7 @@ export const useSearchStore = defineStore('search', {
             this.inLoading = true;
             this.isLoaded = false;
             try {
-                const aiQuery = await invoke<SearchQuery>('ai_search', { naturalQuery: this.naturalSearch });
+                const aiQuery = await invoke<SearchQuery>('ai_search', { naturalQuery: this.naturalSearch, model: this.modelAI });
                 this.query = aiQuery;
                 await this.searchFiles();
             } catch (error) {

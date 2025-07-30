@@ -17,7 +17,8 @@
         <SearchWithAI 
             v-if="searchStore.mode === 'ai_search'" 
             v-model:naturalSearch="searchStore.naturalSearch" 
-            @search="searchStore.aiSearch"
+            v-model:modelAI="searchStore.modelAI"
+            @aiSearch="searchStore.aiSearch"
             @reset="searchStore.reset_search"
             :inLoading="searchStore.inLoading"
             :query="searchStore.query"
