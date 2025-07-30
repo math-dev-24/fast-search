@@ -21,6 +21,7 @@ const defaultStat: Stat = {
 
 const stat = ref<Stat>(defaultStat);
 const previousStat = ref<Stat>(defaultStat);
+const unit = ref<string>('Mo');
 
 const message = useMessage();
 const inLoading = ref<boolean>(false);
@@ -67,8 +68,24 @@ const resetData = async () => {
     }
 }
 
-const octetToMo = (value: number) => {
-    return value / 1024 / 1024;
+const octetToAdapted = (value: number) => {
+    const Mp = value / 1024 / 1024;
+    const Go = Mp / 1024;
+    const To = Go / 1024;
+
+    if (To > 1) {
+        unit.value = 'To';
+        return To;
+    } else if (Go > 1) {
+        unit.value = 'Go';
+        return Go;
+    } else if (Mp > 1) {
+        unit.value = 'Mo';
+        return Mp;
+    } else {
+        unit.value = 'o';
+        return value;
+    }
 }
 
 </script>
@@ -118,8 +135,8 @@ const octetToMo = (value: number) => {
                     <CloudUpload />
                 </NIcon>
                 <div class="text-xl font-bold flex items-center text-purple-600">
-                    <NNumberAnimation :from="octetToMo(previousStat.total_size)" :to="octetToMo(stat.total_size)" :duration="1000" />
-                    <span class="text-sm ml-1">Mo</span>
+                    <NNumberAnimation :from="octetToAdapted(previousStat.total_size)" :to="octetToAdapted(stat.total_size)" :duration="1000" />
+                    <span class="text-sm ml-1">{{ unit }}</span>
                 </div>
                 <div class="text-sm text-gray-600">Taille totale</div>
             </NSpace>

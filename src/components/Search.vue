@@ -31,7 +31,7 @@
                 <div class="space-y-2">
                     <label class="text-sm font-medium">Filtrer par date de <span class="underline" @click="updateDateMode">{{ searchStore.query.filters.date_mode === DateMode.CREATE ? 'création' : 'modification' }}</span> :</label>
                     <NDatePicker v-model:value="searchStore.query.filters.date_range" type="daterange"  clearable @update:value="handleDateChange" />
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center flex-wrap gap-2">
                         <NButton 
                             v-for="shortcut in listShortcuts" 
                             :key="shortcut" 
