@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use adapters::ai::lm_studio::LmStudio;
 use services::ai_service::AiService;
-use utils::{file::open_file_in_explorer, generator::get_service_repository, scan::scan_files_async, indexer::index_content_async};
+use utils::{file::open_file_in_explorer, generator::get_service_repository, scan::scan_files_async, indexer::index_content_async, ai::{get_available_models, check_model_available}};
 use entities::{file::File, stat::Stat, search::SearchQuery};
 
 const LOCAL_URL_AI: &str = "http://192.168.108.172:1234";
@@ -66,19 +66,25 @@ fn reset_data() -> Result<(), String> {
 fn save_paths(paths: Vec<String>, window: tauri::WebviewWindow) -> Result<(), String> {
     let mut service_repository = get_service_repository()?;
     let new_paths = service_repository.insert_paths(paths).expect("Failed to insert paths");
-
     if !new_paths.is_empty() {
         scan_files_async(window, new_paths);
     }
-
     Ok(())
 }
 
 #[tauri::command]
 async fn ai_search(natural_query: String, model: String) -> Result<SearchQuery, String> {
-    let ai_adapter = LmStudio::new(Some(LOCAL_URL_AI.to_string()), Some(model));
+    let ai_adapter = LmStudio::new(Some(LOCAL_URL_AI.to_string()), Some(model.clone()));
     let ai_service = AiService::new(Arc::new(ai_adapter));
-    let search_query = ai_service.generate(&natural_query).await.unwrap();
+
+    let available_models = get_available_models(&ai_service).await?;
+
+    if !check_model_available(&model, &available_models) {
+        return Err(format!("Model {} not available", model));
+    }
+
+    let search_query = ai_service.generate(&natural_query).await
+        .map_err(|e| format!("AI generation failed: {}", e))?;
     Ok(search_query)
 }
 
@@ -86,7 +92,8 @@ async fn ai_search(natural_query: String, model: String) -> Result<SearchQuery, 
 async fn ai_health_check(model: String) -> Result<bool, String> {
     let ai_adapter = LmStudio::new(Some(LOCAL_URL_AI.to_string()), Some(model));
     let ai_service = AiService::new(Arc::new(ai_adapter));
-    let health_check = ai_service.health_check().await.unwrap();
+    let health_check = ai_service.health_check().await
+        .map_err(|e| format!("Health check failed: {}", e))?;
     Ok(health_check)
 }
 
@@ -94,7 +101,8 @@ async fn ai_health_check(model: String) -> Result<bool, String> {
 async fn ai_list_models() -> Result<Vec<String>, String> {
     let ai_adapter = LmStudio::new(Some(LOCAL_URL_AI.to_string()), None);
     let ai_service = AiService::new(Arc::new(ai_adapter));
-    let models = ai_service.list_models().await.unwrap();
+    let models = ai_service.list_models().await
+        .map_err(|e| format!("Failed to list models: {}", e))?;
     Ok(models)
 }
 

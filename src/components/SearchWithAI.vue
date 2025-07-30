@@ -31,6 +31,9 @@ defineProps<{
 const getListModels = async () => {
     const models = await invoke<string[]>('ai_list_models');
     listModels.value = models;
+    if (models.length > 0) {
+        modelAI.value = models[0];
+    }
 }
 
 onMounted(() => {
@@ -79,7 +82,7 @@ onMounted(() => {
             />
         </div>
 
-        <NSelect v-model:value="modelAI" :options="listModels.map(model => ({ label: model, value: model }))" />
+        <NSelect v-model:value="modelAI" :options="listModels.map(model => ({ label: model, value: model }))" class="mb-4" />
         
         <NSpace justify="center" size="medium" class="action-buttons">
             <NButton
@@ -178,44 +181,6 @@ onMounted(() => {
 .search-textarea {
     font-size: 1rem;
     line-height: 1.6;
-}
-
-.search-textarea :deep(.n-input__textarea-el) {
-    border-radius: 8px;
-    border: 2px solid var(--n-border-color);
-    transition: border-color 0.3s ease;
-}
-
-.search-textarea :deep(.n-input__textarea-el:focus) {
-    border-color: var(--n-primary-color);
-    box-shadow: 0 0 0 3px rgba(var(--n-primary-color-rgb), 0.1);
-}
-
-.search-textarea :deep(.n-input__textarea-el:disabled) {
-    background-color: var(--n-color-disabled);
-    cursor: not-allowed;
-}
-
-.action-buttons {
-    width: 100%;
-}
-
-.search-button {
-    min-width: 140px;
-    font-weight: 600;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-}
-
-.search-button:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(var(--n-primary-color-rgb), 0.3);
-}
-
-.search-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
 }
 
 
