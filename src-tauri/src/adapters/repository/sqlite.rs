@@ -43,8 +43,7 @@ impl FileRepository for Db {
             if query.search_in_content {
                 // La recherche dans le contenu sera gérée par la jointure FTS
             } else {
-                // Recherche dans le nom et le chemin
-                conditions.push("(LOWER(name) LIKE LOWER(?)".to_string());
+                conditions.push("(LOWER(name) LIKE LOWER(?))".to_string());
                 params.push(format!("%{}%", query.text));
             }
         }
