@@ -71,6 +71,12 @@ fn save_paths(paths: Vec<String>, window: tauri::WebviewWindow) -> Result<(), St
 }
 
 #[tauri::command]
+fn ai_search(natural_query: String) -> Result<SearchQuery, String> {
+    println!("{}", natural_query);
+    Ok(SearchQuery::default())
+}
+
+#[tauri::command]
 fn search_files( query: SearchQuery) -> Result<Vec<File>, String> {
     let service_repository = get_service_repository()?;
     let files = service_repository.search(&query)?;
@@ -156,11 +162,12 @@ pub fn run() {
         get_all_types, search_files, 
         start_content_indexing,
         open_file, 
-        reset_data, 
+        reset_data,
         get_all_folders,
         save_paths,
         get_all_paths,
-        diagnose_scan_issues
+        diagnose_scan_issues,
+        ai_search
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
