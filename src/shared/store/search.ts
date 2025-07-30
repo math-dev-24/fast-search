@@ -6,6 +6,8 @@ import { DateTime } from 'luxon';
 
 type SearchState = {
     query: SearchQuery;
+    naturalSearch: string;
+    mode: "search" | "ai_search";
     inLoading: boolean;
     result: File[];
     isLoaded: boolean;
@@ -33,6 +35,8 @@ export const useSearchStore = defineStore('search', {
                 search_in_content: false,
                 path_pattern: null
             },
+        naturalSearch: '',
+        mode: "search",
         inLoading: false,
         isLoaded: false,
         result: [],
@@ -70,6 +74,20 @@ export const useSearchStore = defineStore('search', {
                 console.log(JSON.stringify(this.query));
                 this.result = await invoke('search_files', { query: this.query });
                 this.isLoaded = true;
+            } catch (error) {
+                console.error(error);
+            } finally {
+                this.inLoading = false;
+            }
+        },
+
+        async aiSearch() {
+            this.inLoading = true;
+            this.isLoaded = false;
+            try {
+                const aiQuery = await invoke<SearchQuery>('ai_search', { naturalQuery: this.naturalSearch });
+                this.query = aiQuery;
+                await this.searchFiles();
             } catch (error) {
                 console.error(error);
             } finally {

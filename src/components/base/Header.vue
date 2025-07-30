@@ -44,7 +44,11 @@ const emit = defineEmits<{
             <NSpace align="center" :size="14">
                 <RouterLink v-for="route in routes" :key="route.path" :to="route.path" custom
                     v-slot="{ navigate, isActive }">
-                    <NButton :class="{ 'active': isActive }" @click="navigate">
+                    <NButton 
+                        :class="{ 'active': isActive }" 
+                        @click="navigate"
+                        :type="isActive ? 'primary' : 'default'"
+                    >
                         {{ route.name }}
                     </NButton>
                 </RouterLink>
@@ -96,3 +100,17 @@ const emit = defineEmits<{
         />
     </header>
 </template>
+
+<style scoped>
+.active {
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+}
+
+.active:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+</style>

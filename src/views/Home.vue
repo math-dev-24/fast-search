@@ -1,7 +1,32 @@
 <template>
-    <NSpace vertical class="pt-14 px-6">
-        <Search v-model="searchStore" @search="searchStore.searchFiles" @reset="searchStore.reset_search" />
+    <NSpace vertical class="pt-4 px-6">
+
+        <div class="flex items-center">
+            <NButton @click="searchStore.mode = 'search'" :type="searchStore.mode === 'search' ? 'primary' : 'default'">Search</NButton>
+            <NButton @click="searchStore.mode = 'ai_search'" :type="searchStore.mode === 'ai_search' ? 'primary' : 'default'">AI Search</NButton>
+        </div>
+
+        <!-- Search -->
+        <Search 
+            v-if="searchStore.mode === 'search'" 
+            v-model="searchStore" 
+            @search="searchStore.searchFiles"
+            @reset="searchStore.reset_search"
+            />
+        <!-- AI Search -->
+        <SearchWithAI 
+            v-if="searchStore.mode === 'ai_search'" 
+            v-model:naturalSearch="searchStore.naturalSearch" 
+            @search="searchStore.aiSearch"
+            @reset="searchStore.reset_search"
+            :inLoading="searchStore.inLoading"
+            :query="searchStore.query"
+            :isLoaded="searchStore.isLoaded"
+        />
+
         <NDivider />
+
+        <!-- Résultats -->
         <template v-if="searchStore.isLoaded">
             <NCard class="mb-4">
                 <NSpace justify="space-around" align="center">
@@ -77,6 +102,7 @@
 import { ref, watch } from 'vue';
 import { NSpace, NGrid, NGi, NDivider, NStatistic, NCard, NText, NEmpty, NButton, NNumberAnimation, useMessage } from 'naive-ui';
 import Search from '../components/Search.vue';
+import SearchWithAI from '../components/SearchWithAI.vue';
 import CardFile from '../components/card/File.vue';
 import Folder from '../components/card/Folder.vue';
 import Filter from '../components/Filter.vue';
