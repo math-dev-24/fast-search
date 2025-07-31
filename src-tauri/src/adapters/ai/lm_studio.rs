@@ -198,7 +198,7 @@ impl Ai for LmStudio {
     async fn health_check(&self) -> Result<bool, AiError> {
         match self.list_models().await {
             Ok(_) => Ok(true),
-            Err(_) => Ok(false)
+            Err(e) => Err(e)
         }
     }
 }

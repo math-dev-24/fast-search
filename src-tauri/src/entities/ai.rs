@@ -22,8 +22,6 @@ pub struct AiResponse {
 pub enum AiError {
     #[error("Connection failed: {0}")]
     ConnectionError(String),
-    #[error("Model not available: {0}")]
-    ModelNotAvailable(String),
     #[error("Request failed: {0}")]
     RequestFailed(String),
     #[error("Parsing error: {0}")]

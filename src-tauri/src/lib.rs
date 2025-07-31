@@ -11,7 +11,7 @@ use services::ai_service::AiService;
 use utils::{file::open_file_in_explorer, generator::get_service_repository, scan::scan_files_async, indexer::index_content_async, ai::{get_available_models, check_model_available}};
 use entities::{file::File, stat::Stat, search::SearchQuery};
 
-const LOCAL_URL_AI: &str = "http://192.168.108.172:1234";
+const LOCAL_URL_AI: &str = "http://192.168.108.177:1234";
 
 #[tauri::command]
 fn open_file(path: String) -> Result<(), String> {
