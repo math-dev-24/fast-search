@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import { NAutoComplete, NCheckbox, NIcon, NCard, NFlex, NButton } from 'naive-ui';
 import { Filter } from '@vicons/ionicons5';
-import { useSearchStore } from '../shared/store/search';
+import { useSearchStore } from '../shared';
 
 const searchStore = useSearchStore();
 

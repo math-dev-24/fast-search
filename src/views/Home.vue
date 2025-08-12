@@ -1,117 +1,198 @@
 <template>
-    <NSpace vertical class="pt-4 px-6">
+  <NLayout class="min-h-screen">
+    <NLayoutHeader class="pt-2 px-6">
+      <NTabs
+          v-model:value="modeSearch"
+          size="large"
+          type="line"
+      >
+        <NTab name="search" tab="🔍 Recherche Standard"/>
+        <NTab name="ai_search" tab="🤖 Recherche IA"/>
+      </NTabs>
+    </NLayoutHeader>
 
-        <div class="flex items-center">
-            <NButton @click="searchStore.mode = 'search'" :type="searchStore.mode === 'search' ? 'primary' : 'default'">Search</NButton>
-            <NButton @click="searchStore.mode = 'ai_search'" :type="searchStore.mode === 'ai_search' ? 'primary' : 'default'">AI Search</NButton>
-        </div>
+    <NLayoutContent class="p-6">
+      <Search v-if="modeSearch === 'search'" @reset="searchStore.reset_search" @search="searchStore.searchFiles"/>
+      <SearchWithAI v-if="modeSearch === 'ai_search'" @search="handleSearchWithAi"/>
+      <NDivider/>
 
-        <!-- Search -->
-        <Search 
-            v-if="searchStore.mode === 'search'" 
-            v-model="searchStore" 
-            @search="searchStore.searchFiles"
-            @reset="searchStore.reset_search"
-            />
-        <!-- AI Search -->
-        <SearchWithAI 
-            v-if="searchStore.mode === 'ai_search'" 
-            v-model:naturalSearch="searchStore.naturalSearch" 
-            v-model:modelAI="searchStore.modelAI"
-            @aiSearch="searchStore.aiSearch"
-            @reset="searchStore.reset_search"
-            :inLoading="searchStore.inLoading"
-            :query="searchStore.query"
-            :isLoaded="searchStore.isLoaded"
-        />
+      <template v-if="searchStore.isLoaded">
+        <!-- Statistiques -->
+        <NCard :bordered="false" class="mb-6" embedded>
+          <template #header>
+            <NText class="text-lg font-medium">📊 Statistiques de recherche</NText>
+          </template>
+          <NGrid :cols="3" :x-gap="16">
+            <NGi>
+              <NStatistic label="Total des résultats" label-style="color: #666; font-size: 14px;">
+                <NNumberAnimation
+                    :duration="800"
+                    :from="previousTotalResults"
+                    :to="searchStore.filterResult.length"
+                    class="text-2xl font-bold text-blue-600"
+                />
+              </NStatistic>
+            </NGi>
+            <NGi>
+              <NStatistic label="Fichiers trouvés" label-style="color: #666; font-size: 14px;">
+                <NNumberAnimation
+                    :duration="800"
+                    :from="previousFilesCount"
+                    :to="searchStore.filterResult.filter(file => !file.is_dir).length"
+                    class="text-2xl font-bold text-green-600"
+                />
+              </NStatistic>
+            </NGi>
+            <NGi>
+              <NStatistic label="Dossiers trouvés" label-style="color: #666; font-size: 14px;">
+                <NNumberAnimation
+                    :duration="800"
+                    :from="previousFoldersCount"
+                    :to="searchStore.filterResult.filter(file => file.is_dir).length"
+                    class="text-2xl font-bold text-purple-600"
+                />
+              </NStatistic>
+            </NGi>
+          </NGrid>
+        </NCard>
 
-        <NDivider />
+        <Filter v-model="searchStore"/>
 
         <!-- Résultats -->
-        <template v-if="searchStore.isLoaded">
-            <NCard class="mb-4">
-                <NSpace justify="space-around" align="center">
-                    <NStatistic label="Résultats">
-                        <NNumberAnimation :from="previousTotalResults" :to="searchStore.filterResult.length" :duration="1000" />
-                    </NStatistic>
-                    <NDivider vertical />
-                    <NStatistic label="Fichiers">
-                        <NNumberAnimation :from="previousFilesCount" :to="searchStore.filterResult.filter(file => !file.is_dir).length" :duration="1000" />
-                    </NStatistic>
-                    <NDivider vertical />
-                    <NStatistic label="Dossiers">
-                        <NNumberAnimation :from="previousFoldersCount" :to="searchStore.filterResult.filter(file => file.is_dir).length" :duration="1000" />
-                    </NStatistic>
-                </NSpace>
+        <NSpace v-if="searchStore.filterResult.length > 0" size="large" vertical>
+          <!-- Section Dossiers -->
+          <div v-if="searchStore.filterResult.filter(file => file.is_dir).length > 0">
+            <NCard :bordered="false" class="mb-6" embedded title="📁 Dossiers">
+              <template #header-extra>
+                <NBadge
+                    :max="999"
+                    :value="searchStore.filterResult.filter(file => file.is_dir).length"
+                    type="info"
+                />
+              </template>
+              <NGrid :cols="4" :x-gap="12" :y-gap="12" responsive="screen">
+                <NGi v-for="file in searchStore.filterResult.filter(file => file.is_dir).slice(0, maxFolders)"
+                     :key="file.name">
+                  <Folder
+                      :file="file"
+                      @openFile="searchStore.openFile"
+                  />
+                </NGi>
+              </NGrid>
+              <div v-if="searchStore.filterResult.filter(file => file.is_dir).length > maxFolders"
+                   class="mt-4 text-center">
+                <NButton
+                    class="w-full max-w-md"
+                    secondary
+                    size="large"
+                    type="primary"
+                    @click="maxFolders += 10"
+                >
+                  📂 Voir {{ Math.min(10, searchStore.filterResult.filter(file => file.is_dir).length - maxFolders) }}
+                  dossiers de plus
+                </NButton>
+              </div>
             </NCard>
-            <Filter v-model="searchStore" />
-            <div v-if="searchStore.filterResult.length > 0" class="mt-4">
-                <div v-if="searchStore.filterResult.filter(file => file.is_dir).length > 0" class="mb-8">
-                    <NText class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2" depth="3">
-                        Dossiers ({{ searchStore.filterResult.filter(file => file.is_dir).length }})
-                    </NText>
-                    <NGrid :cols="4" :x-gap="4" :y-gap="4">
-                        <NGi v-for="file in searchStore.filterResult.filter(file => file.is_dir).slice(0, maxFolders)" :key="file.name">
-                            <Folder
-                                :file="file" 
-                                @openFile="searchStore.openFile"
-                            />
-                        </NGi>
-                    </NGrid>
-                    <div v-if="searchStore.filterResult.filter(file => file.is_dir).length > maxFolders" class="flex justify-center items-center mt-6 w-full">
-                        <NButton @click="maxFolders += 10" tertiary type="info" class="w-full">
-                            Voir plus ({{ searchStore.filterResult.filter(file => file.is_dir).length - maxFolders }})
-                        </NButton>
-                    </div>
-                </div>
-                
-                <div v-if="searchStore.filterResult.filter(file => !file.is_dir).length > 0" class="mb-8">
-                    <NText class="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2" depth="3">
-                        Fichiers ({{ searchStore.filterResult.filter(file => !file.is_dir).length }})
-                    </NText>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        <CardFile
-                            v-for="file in searchStore.filterResult.filter(file => !file.is_dir).slice(0, maxFiles)"
-                            :key="file.name" 
-                            :file="file"
-                            @openFile="handleOpenFile"
-                            @copyPath="searchStore.copyPath"
-                            @previewFile="handlePreviewFile"
-                        />
-                    </div>
-                    <div v-if="searchStore.filterResult.filter(file => !file.is_dir).length > maxFiles" class="flex justify-center items-center mt-6 w-full">
-                            <NButton @click="maxFiles += 50" tertiary type="info" class="w-full">
-                                Voir plus ({{ searchStore.filterResult.filter(file => !file.is_dir).length - maxFiles }})
-                            </NButton>
-                        </div>
-                </div>
-            </div>
-            
-            <div v-else class="flex justify-center items-center min-h-[200px]">
-                <NEmpty description="Aucun résultat trouvé" />
-            </div>
-        </template>
-    </NSpace>
-    <FileDetail
-        :show="showDetail"
-        :file="detailFile" 
-        @update:show="showDetail = false"
-    />
+          </div>
+
+          <!-- Section Fichiers -->
+          <div v-if="searchStore.filterResult.filter(file => !file.is_dir).length > 0">
+            <NCard :bordered="false" embedded title="📄 Fichiers">
+              <template #header-extra>
+                <NBadge
+                    :max="999"
+                    :value="searchStore.filterResult.filter(file => !file.is_dir).length"
+                    type="success"
+                />
+              </template>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <CardFile
+                    v-for="file in searchStore.filterResult.filter(file => !file.is_dir).slice(0, maxFiles)"
+                    :key="file.name"
+                    :file="file"
+                    @copyPath="searchStore.copyPath"
+                    @openFile="handleOpenFile"
+                    @previewFile="handlePreviewFile"
+                />
+              </div>
+              <div v-if="searchStore.filterResult.filter(file => !file.is_dir).length > maxFiles"
+                   class="mt-6 text-center">
+                <NButton
+                    class="w-full max-w-md"
+                    secondary
+                    size="large"
+                    type="primary"
+                    @click="maxFiles += 50"
+                >
+                  📄 Voir {{ Math.min(50, searchStore.filterResult.filter(file => !file.is_dir).length - maxFiles) }}
+                  fichiers de plus
+                </NButton>
+              </div>
+            </NCard>
+          </div>
+        </NSpace>
+
+        <NCard v-else class="mt-6">
+          <div class="flex flex-col items-center justify-center py-16">
+            <NEmpty
+                class="mb-4"
+                description="Aucun résultat trouvé"
+                size="large"
+            >
+              <template #icon>
+                <div class="text-6xl">🔍</div>
+              </template>
+              <template #extra>
+                <NText class="text-center max-w-md" depth="3">
+                  Essayez de modifier vos critères de recherche ou utilisez des mots-clés différents
+                </NText>
+              </template>
+            </NEmpty>
+          </div>
+        </NCard>
+      </template>
+    </NLayoutContent>
+  </NLayout>
+  <FileDetail
+      :file="detailFile"
+      :show="showDetail"
+      @update:show="showDetail = false"
+  />
 </template>
 
-<script setup lang="ts">
-import { ref, watch } from 'vue';
-import { NSpace, NGrid, NGi, NDivider, NStatistic, NCard, NText, NEmpty, NButton, NNumberAnimation, useMessage } from 'naive-ui';
-import Search from '../components/Search.vue';
+<script lang="ts" setup>
+import {ref, watch} from 'vue';
+import {
+  NBadge,
+  NButton,
+  NCard,
+  NDivider,
+  NEmpty,
+  NGi,
+  NGrid,
+  NLayout,
+  NLayoutContent,
+  NLayoutHeader,
+  NNumberAnimation,
+  NSpace,
+  NStatistic,
+  NTab,
+  NTabs,
+  NText,
+  useMessage
+} from 'naive-ui';
 import SearchWithAI from '../components/SearchWithAI.vue';
 import CardFile from '../components/card/File.vue';
 import Folder from '../components/card/Folder.vue';
 import Filter from '../components/Filter.vue';
 import FileDetail from '../components/FileDetail.vue';
-import { useSearchStore } from '../shared/store/search';
-import type { File } from '../types';
+import {useSearchStore} from '../shared';
+import type {File, SearchQuery} from '../types';
+import Search from "../components/Search.vue";
+
 
 const searchStore = useSearchStore();
+const modeSearch = ref<string>('search');
 const maxFiles = ref<number>(20);
 const maxFolders = ref<number>(8);
 
@@ -123,20 +204,26 @@ const previousFilesCount = ref<number>(0);
 const previousFoldersCount = ref<number>(0);
 
 watch(() => searchStore.filterResult, () => {
-    previousTotalResults.value = searchStore.filterResult.length;
-    previousFilesCount.value = searchStore.filterResult.filter(file => !file.is_dir).length;
-    previousFoldersCount.value = searchStore.filterResult.filter(file => file.is_dir).length;
-}, { deep: true });
+  previousTotalResults.value = searchStore.filterResult.length;
+  previousFilesCount.value = searchStore.filterResult.filter(file => !file.is_dir).length;
+  previousFoldersCount.value = searchStore.filterResult.filter(file => file.is_dir).length;
+}, {deep: true});
 
 function handlePreviewFile(file: File) {
-    detailFile.value = file;
-    showDetail.value = true;
+  detailFile.value = file;
+  showDetail.value = true;
 }
 
 function handleOpenFile(path: string) {
   const message = useMessage();
-  searchStore.openFile(path);
   message.success('Le dossier va être ouvert (cela peu prendre quelque secondes)');
+  searchStore.openFile(path);
+}
+
+async function handleSearchWithAi(query: SearchQuery) {
+  searchStore.query = query;
+  modeSearch.value = 'search';
+  await searchStore.searchFiles();
 
 }
 

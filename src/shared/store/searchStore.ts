@@ -1,48 +1,42 @@
-import { defineStore } from 'pinia';
-import { invoke } from '@tauri-apps/api/core';
-import type { File, Stat } from '../../types';
-import { type SearchQuery, SortBy, SortOrder, DateMode } from '../../types/search';
-import { DateTime } from 'luxon';
+import {defineStore} from 'pinia';
+import {invoke} from '@tauri-apps/api/core';
+import type {File} from '../../types';
+import {DateMode, type SearchQuery, SortBy, SortOrder} from '../../types';
+import {DateTime} from 'luxon';
 
 type SearchState = {
     query: SearchQuery;
-    naturalSearch: string;
-    modelAI: string;
-    mode: "search" | "ai_search";
-    inLoading: boolean;
     result: File[];
-    isLoaded: boolean;
     search: string;
     auto_submit: boolean;
+    in_loading: boolean;
+    is_loaded: boolean;
 }
 
 export const useSearchStore = defineStore('search', {
     state: (): SearchState => ({
-                    query: {
-                text: '',
-                filters: {
-                    is_dir: false,
-                    folders: [],
-                    file_types: [],
-                    size_limit: [0, 1000],
-                    date_range: [0, DateTime.now().endOf('day').toMillis()],
-                    date_mode: DateMode.MODIFY,
-                    search_in_content: false
-                },
-                sort_by: SortBy.NAME,
-                sort_order: SortOrder.ASC,
-                limit: 1000,
-                offset: 0,
-                search_in_content: false,
-                path_pattern: null
+        query: {
+            text: '',
+            filters: {
+                is_dir: false,
+                folders: [],
+                file_types: [],
+                size_limit: [0, 1000],
+                date_range: [0, DateTime.now().endOf('day').toMillis()],
+                date_mode: DateMode.MODIFY,
+                search_in_content: false
             },
-        naturalSearch: '',
-        modelAI: '',
-        mode: "search",
-        inLoading: false,
-        isLoaded: false,
+            sort_by: SortBy.NAME,
+            sort_order: SortOrder.ASC,
+            limit: 1000,
+            offset: 0,
+            search_in_content: false,
+            path_pattern: null
+        },
         result: [],
         search: '',
+        in_loading: false,
+        is_loaded: false,
         auto_submit: true
     }),
 
@@ -56,11 +50,11 @@ export const useSearchStore = defineStore('search', {
         options(): { label: string; value: string }[] {
             const allNames = this.result.map(file => file.name);
             const uniqueNames = [...new Set(allNames)];
-            
-            const filteredSuggestions = uniqueNames.filter(name => 
+
+            const filteredSuggestions = uniqueNames.filter(name =>
                 name.toLowerCase().includes(this.search.toLowerCase())
             );
-            
+
             return filteredSuggestions.slice(0, 5).map(name => ({
                 label: name,
                 value: name
@@ -70,49 +64,16 @@ export const useSearchStore = defineStore('search', {
 
     actions: {
         async searchFiles() {
-            this.inLoading = true;
-            this.isLoaded = false;
+            this.in_loading = true;
+            this.is_loaded = false;
             try {
                 console.log(JSON.stringify(this.query));
-                this.result = await invoke('search_files', { query: this.query });
-                this.isLoaded = true;
+                this.result = await invoke('search_files', {query: this.query});
+                this.is_loaded = true;
             } catch (error) {
                 console.error(error);
             } finally {
-                this.inLoading = false;
-            }
-        },
-
-        async aiSearch() {
-            this.inLoading = true;
-            this.isLoaded = false;
-            try {
-                const aiQuery = await invoke<SearchQuery>('ai_search', { naturalQuery: this.naturalSearch, model: this.modelAI });
-                this.query = aiQuery;
-                await this.searchFiles();
-            } catch (error) {
-                console.error(error);
-            } finally {
-                this.inLoading = false;
-            }
-        },
-
-        async getIndexStats() {
-            try {
-                const stats = await invoke<Stat>('get_index_stats');
-                console.log(stats);
-                return stats;
-            } catch (error) {
-                console.error('Erreur récupération stats indexation:', error);
-                return null;
-            }
-        },
-
-        async startIndexation() {
-            try {
-                await invoke('index_files');
-            } catch (error) {
-                console.error('Erreur démarrage indexation:', error);
+                this.in_loading = false;
             }
         },
 
@@ -139,7 +100,7 @@ export const useSearchStore = defineStore('search', {
         },
 
         async openFile(path: string) {
-            await invoke('open_file', { path: path });
+            await invoke('open_file', {path: path});
         },
 
         async copyPath(path: string) {
@@ -157,7 +118,7 @@ export const useSearchStore = defineStore('search', {
             }
 
             const headers = ['Chemin', 'Nom', 'Type', 'Taille (octets)', 'Dernière modification', 'Date de création', 'Est un dossier'];
-            
+
             const escapeCsvValue = (value: any): string => {
                 if (value === null || value === undefined) return '';
                 const stringValue = String(value);
@@ -181,16 +142,16 @@ export const useSearchStore = defineStore('search', {
             ];
 
             const csvContent = csvRows.join('\n');
-            
+
             const BOM = '\uFEFF';
-            const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-            
+            const blob = new Blob([BOM + csvContent], {type: 'text/csv;charset=utf-8;'});
+
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = `recherche_${new Date().toISOString().split('T')[0]}.csv`;
             a.style.display = 'none';
-            
+
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

@@ -1,343 +1,189 @@
-<script setup lang="ts">
-import { defineModel, onMounted, ref } from 'vue';
-import { NInput, NButton, NSpace, NIcon, NTooltip, NSelect, NTag } from 'naive-ui';
-import { SearchOutline, RefreshOutline, InformationCircleOutline, CheckmarkCircleOutline, CloseCircleOutline, TimeOutline } from '@vicons/ionicons5';
-import type { SearchQuery } from '../types/search';
-import { invoke } from '@tauri-apps/api/core';
+<script lang="ts" setup>
+import {computed, onMounted} from 'vue';
+import {NAlert, NButton, NIcon, NInput, NSelect, NSpace, NTag} from 'naive-ui';
+import {
+  CheckmarkCircleOutline,
+  CloseCircleOutline,
+  RefreshOutline,
+  SearchOutline,
+  TimeOutline,
+} from '@vicons/ionicons5';
+import {useAiStore} from "../shared";
+import {SearchQuery} from "../types";
 
-const naturalSearch = defineModel<string>('naturalSearch', { required: true });
-const modelAI = defineModel<string>('modelAI', { required: true });
 
-const listModels = ref<string[]>([]);
-const healthCheck = ref<boolean>(false);
-const loadingHealthCheck = ref<boolean>(false);
+const aiStore = useAiStore();
 
 const emit = defineEmits<{
-    (e: 'aiSearch', query: string): void;
+  (e: 'search', query: SearchQuery): void;
 }>();
 
-const aiSearch = () => {
-    emit('aiSearch', naturalSearch.value);
-}
+const connectionStatusIcon = computed(() => {
+  switch (aiStore.connectionStatus) {
+    case 'connected':
+      return CheckmarkCircleOutline;
+    case 'connecting':
+      return TimeOutline;
+    case 'error':
+      return CloseCircleOutline;
+    default:
+      return CloseCircleOutline;
+  }
+});
 
-const resetSearch = () => {
-    naturalSearch.value = '';
-}
+const connectionStatusType = computed(() => {
+  switch (aiStore.connectionStatus) {
+    case 'connected':
+      return 'success';
+    case 'connecting':
+      return 'warning';
+    case 'error':
+      return 'error';
+    default:
+      return 'default';
+  }
+});
 
-defineProps<{
-    inLoading: boolean;
-    isLoaded: boolean;
-    query: SearchQuery;
-}>()
+const connectionStatusText = computed(() => {
+  switch (aiStore.connectionStatus) {
+    case 'connected':
+      return 'Connecté';
+    case 'connecting':
+      return 'Connexion...';
+    case 'error':
+      return 'Erreur';
+    default:
+      return 'Déconnecté';
+  }
+});
 
-const getListModels = async () => {
-    const models = await invoke<string[]>('ai_list_models');
-    listModels.value = models;
-    if (models.length > 0) {
-        modelAI.value = models[0];
-    }
-}
-
-const healthCheckAI = async () => {
-    loadingHealthCheck.value = true;
-    const health = await invoke<boolean>('ai_health_check', { model: modelAI.value });
-    healthCheck.value = health;
-    loadingHealthCheck.value = false;
-    if (health) {
-        getListModels();
-    }
+const handleSearch = async () => {
+  const query: SearchQuery | undefined = await aiStore.aiSearch()
+  if (!query) return
+  emit('search', query)
 }
 
 onMounted(() => {
-    healthCheckAI();
-    getListModels();
-});
+  aiStore.checkConnection()
+  aiStore.loadModels()
+})
+
 </script>
 
 <template>
-    <div class="search-ai-container">
-        <!-- Header redesigné avec statut moderne -->
-        <div class="search-header">
-            <div class="header-left">
-                <h3 class="search-title">Recherche IA</h3>
-                <div class="status-indicator">
-                    <div class="ai-status">
-                        <NTag 
-                            :type="healthCheck ? 'success' : loadingHealthCheck ? 'warning' : 'error'"
-                            size="small"
-                            round
-                        >
-                            <template #icon>
-                                <NIcon size="14">
-                                    <CheckmarkCircleOutline v-if="healthCheck && !loadingHealthCheck" />
-                                    <TimeOutline v-else-if="loadingHealthCheck" />
-                                    <CloseCircleOutline v-else />
-                                </NIcon>
-                            </template>
-                            <span class="status-text">
-                                {{ healthCheck && !loadingHealthCheck ? 'Connecté' : loadingHealthCheck ? 'Vérification...' : 'Déconnecté' }}
+  <div class="p-6 transition-all duration-300">
+    <div class="search-header flex justify-between items-start mb-6 p-4">
+      <div class="header-left flex items-center gap-3">
+        <div class="flex items-center gap-2">
+          <div class="w-2 h-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full animate-pulse"></div>
+            <h3 class="search-title text-xl font-bold">
+              Recherche avec l'IA
+            </h3>
+        </div>
+        <div class="status-indicator flex items-center gap-2">
+          <div class="ai-status flex items-center gap-1">
+            <NTag
+                :type="connectionStatusType"
+                class="font-medium shadow-sm transition-all duration-200"
+                round
+                size="small"
+            >
+              <template #icon>
+                <NIcon size="14">
+                  <component :is="connectionStatusIcon"/>
+                </NIcon>
+              </template>
+              <span class="status-text text-xs font-semibold">
+                                {{ connectionStatusText }}
                             </span>
-                        </NTag>
-                        
-                        <NButton 
-                            v-if="!healthCheck && !loadingHealthCheck"
-                            @click="healthCheckAI" 
-                            size="tiny" 
-                            quaternary
-                            class="retry-button"
-                        >
-                            <NIcon size="12">
-                                <RefreshOutline />
-                            </NIcon>
-                        </NButton>
-                    </div>
-                    
-                    <!-- Indicateur de modèle sélectionné -->
-                    <div v-if="modelAI" class="model-indicator">
-                        <NTag type="info" size="small" round>
-                            <span class="model-text">{{ modelAI }}</span>
-                        </NTag>
-                    </div>
-                </div>
-            </div>
+            </NTag>
+            <NTag v-if="aiStore.selectedModel" class="font-medium shadow-sm" round size="small" type="info">
+              <span class="model-text text-xs font-semibold">{{ aiStore.selectedModel }}</span>
+            </NTag>
 
-            <!-- Bouton d'information avec badge -->
-            <div class="header-right">
-                <NTooltip trigger="hover" placement="top">
-                    <template #trigger>
-                        <NButton
-                            quaternary
-                            size="small"
-                            class="info-button"
-                            :disabled="!isLoaded || !healthCheck"
-                        >
-                            <NIcon>
-                                <InformationCircleOutline />
-                            </NIcon>
-                        </NButton>
-                    </template>
-                    <div class="query-info">
-                        <h4>Dernière recherche :</h4>
-                        <div class="query-details">
-                            <p><strong>Terme :</strong> {{ query.text || 'Aucun' }}</p>
-                            <p><strong>Filtres :</strong> {{ query.filters ? 'Configurés' : 'Aucun' }}</p>
-                            <p><strong>Tri :</strong> {{ query.sort_by }} ({{ query.sort_order }})</p>
-                        </div>
-                    </div>
-                </NTooltip>
-            </div>
-        </div>
-
-        <div class="search-input-wrapper">
-            <NInput
-                v-model:value="naturalSearch"
-                placeholder="Décrivez ce que vous recherchez..."
-                type="textarea"
-                :autosize="{ minRows: 3, maxRows: 6 }"
-                class="search-textarea"
-                clearable
-                :disabled="inLoading"
-                :loading="inLoading"
-            />
-        </div>
-
-        <NSelect v-model:value="modelAI" :options="listModels.map(model => ({ label: model, value: model }))" class="mb-4" />
-        
-        <NSpace justify="center" size="medium" class="action-buttons">
             <NButton
-                @click="aiSearch"
-                type="primary"
-                size="large"
-                :disabled="!naturalSearch || inLoading"
-                :loading="inLoading"
-                class="search-button"
+                v-if="aiStore.connectionStatus !== 'connected' && aiStore.connectionStatus !== 'connecting'"
+                class="retry-button ml-1 hover:bg-blue-50 dark:hover:bg-gray-700 transition-all duration-200"
+                quaternary
+                size="tiny"
+                @click="aiStore.checkConnection()"
             >
-                <template #icon>
-                    <NIcon>
-                        <SearchOutline />
-                    </NIcon>
-                </template>
-                {{ inLoading ? 'Recherche...' : 'Rechercher' }}
+              <NIcon size="12">
+                <RefreshOutline/>
+              </NIcon>
             </NButton>
-            
-            <NButton
-                @click="resetSearch"
-                type="default"
-                size="large"
-                :disabled="!naturalSearch || inLoading"
-                class="reset-button"
-            >
-                <template #icon>
-                    <NIcon>
-                        <RefreshOutline />
-                    </NIcon>
-                </template>
-                Réinitialiser
-            </NButton>
-        </NSpace>
+          </div>
+        </div>
+      </div>
+      <span class="text-xs italic">{{aiStore.apiUrl}}</span>
     </div>
+
+    <div class="search-input-wrapper mb-6">
+      <div class="relative">
+        <NInput
+            v-model:value="aiStore.naturalSearch"
+            :autosize="{ minRows: 3, maxRows: 6 }"
+            :disabled="aiStore.connectionStatus !== 'connected' || !aiStore.selectedModel"
+            class="search-textarea transition-all duration-200"
+            clearable
+            placeholder="Décrivez ce que vous recherchez en langage naturel..."
+            type="textarea"
+        />
+        <div class="absolute bottom-2 right-2 text-xs text-gray-400 dark:text-gray-500 font-medium">
+          {{ aiStore.naturalSearch?.length || 0 }} caractères
+        </div>
+      </div>
+    </div>
+
+    <!-- Sélecteur de modèle -->
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        Modèle IA
+      </label>
+      <NSelect
+          v-model:value="aiStore.selectedModel"
+          :disabled="aiStore.connectionStatus !== 'connected' || aiStore.availableModels.length === 0"
+          :options="aiStore.availableModelOptions"
+          class="w-full transition-all duration-200"
+          placeholder="Sélectionner un modèle IA"
+      />
+    </div>
+
+    <!-- Boutons d'action -->
+    <NSpace class="action-buttons mt-8" justify="center" size="medium">
+      <NButton
+          :disabled="!aiStore.naturalSearch?.trim() || aiStore.connectionStatus !== 'connected' || !aiStore.selectedModel"
+          size="large"
+          type="primary"
+          @click="handleSearch"
+      >
+        <template #icon>
+          <NIcon class="mr-1">
+            <SearchOutline/>
+          </NIcon>
+        </template>
+        {{ aiStore.inLoading ? 'Recherche...' : 'Rechercher' }}
+      </NButton>
+    </NSpace>
+
+    <!-- Indicateur de statut du service -->
+    <div v-if="aiStore.connectionStatus !== 'connected' && aiStore.connectionStatus !== 'connecting'" class="mt-6">
+      <NAlert
+          :show-icon="true"
+          type="warning"
+      >
+        Service IA non disponible. Vérifiez votre connexion.
+      </NAlert>
+    </div>
+
+    <!-- Indicateur d'absence de modèle -->
+    <div v-if="aiStore.connectionStatus === 'connected' && !aiStore.selectedModel" class="mt-6">
+      <NAlert
+          :show-icon="true"
+          type="info"
+      >
+        Aucun modèle sélectionné. Veuillez choisir un modèle IA.
+      </NAlert>
+    </div>
+  </div>
 </template>
-
-<style scoped>
-.search-ai-container {
-    transition: all 0.3s ease;
-}
-
-.search-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1.5rem;
-    padding: 1rem;
-    background: var(--n-color-modal);
-    border-radius: 12px;
-    border: 1px solid var(--n-border-color);
-}
-
-.header-left {
-    display: flex;
-    gap: 0.75rem;
-}
-
-.search-title {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--n-text-color);
-    background: linear-gradient(135deg, var(--n-primary-color), var(--n-primary-color-hover));
-}
-
-.status-indicator {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.ai-status {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-.status-text {
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.retry-button {
-    padding: 2px;
-    min-width: 20px;
-    height: 20px;
-}
-
-.model-indicator {
-    display: flex;
-    align-items: center;
-}
-
-.model-text {
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.header-right {
-    display: flex;
-    align-items: center;
-}
-
-.info-button {
-    opacity: 0.7;
-    transition: all 0.3s ease;
-    border-radius: 8px;
-}
-
-.info-button:hover {
-    opacity: 1;
-    transform: scale(1.05);
-}
-
-.info-button:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.query-info {
-    max-width: 300px;
-    padding: 0.75rem;
-}
-
-.query-info h4 {
-    margin: 0 0 0.75rem 0;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--n-text-color);
-}
-
-.query-details p {
-    margin: 0.25rem 0;
-    font-size: 0.85rem;
-    color: var(--n-text-color-2);
-}
-
-.query-details strong {
-    color: var(--n-text-color);
-}
-
-.search-input-wrapper {
-    margin-bottom: 1.5rem;
-}
-
-.search-textarea {
-    font-size: 1rem;
-    line-height: 1.6;
-    border-radius: 8px;
-}
-
-.action-buttons {
-    margin-top: 1rem;
-}
-
-.search-button {
-    border-radius: 8px;
-    font-weight: 600;
-    transition: all 0.3s ease;
-}
-
-.search-button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.reset-button {
-    border-radius: 8px;
-    font-weight: 500;
-    transition: all 0.3s ease;
-}
-
-.reset-button:hover {
-    transform: translateY(-1px);
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-    .search-header {
-        flex-direction: column;
-        gap: 1rem;
-        align-items: stretch;
-    }
-    
-    .header-left {
-        align-items: center;
-    }
-    
-    .status-indicator {
-        justify-content: center;
-    }
-    
-    .header-right {
-        justify-content: center;
-    }
-}
-</style>

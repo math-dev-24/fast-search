@@ -170,12 +170,12 @@ src/
 │   └── useSync.ts      # Gestion de la synchronisation
 ├── shared/             # Code partagé
 │   ├── store/          # Stores Pinia
-│   │   └── search.ts   # Store de recherche
+│   │   └── searchStore.ts   # Store de recherche
 │   ├── pathFormat.ts   # Utilitaires de formatage
-│   └── sieFormat.ts    # Formatage des tailles
+│   └── sizeFormat.ts    # Formatage des tailles
 ├── types/              # Types TypeScript
 │   ├── file.ts         # Interface File
-│   ├── search.ts       # Types de recherche
+│   ├── searchStore.ts       # Types de recherche
 │   ├── setting.ts      # Interface Setting
 │   └── stat.ts         # Interface Stat
 └── route.ts            # Configuration du routage
