@@ -8,8 +8,8 @@ import {
   SearchOutline,
   TimeOutline,
 } from '@vicons/ionicons5';
-import {useAiStore} from "../shared";
-import {SearchQuery} from "../types";
+import {useAiStore} from "../../shared";
+import {SearchQuery} from "../../types";
 
 
 const aiStore = useAiStore();

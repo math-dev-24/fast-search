@@ -18,7 +18,7 @@
 
       <template v-if="searchStore.is_loaded">
         <!-- Statistiques -->
-        <NCard :bordered="false" class="mb-6" embedded>
+        <NCard :bordered="false" class="mb-2" embedded>
           <template #header>
             <NText class="text-lg font-medium">📊 Statistiques de recherche</NText>
           </template>
@@ -153,11 +153,13 @@
       </template>
     </NLayoutContent>
   </NLayout>
+
   <FileDetail
       :file="detailFile"
       :show="showDetail"
       @update:show="showDetail = false"
   />
+
 </template>
 
 <script lang="ts" setup>
@@ -181,14 +183,14 @@ import {
   NText,
   useMessage
 } from 'naive-ui';
-import SearchWithAI from '../components/SearchWithAI.vue';
+import SearchWithAI from '../components/Search/AISearch.vue';
 import CardFile from '../components/card/File.vue';
 import Folder from '../components/card/Folder.vue';
 import Filter from '../components/Filter.vue';
 import FileDetail from '../components/FileDetail.vue';
 import {useSearchStore} from '../shared';
 import type {File, SearchQuery} from '../types';
-import Search from "../components/Search.vue";
+import Search from "../components/Search/Search.vue";
 
 
 const searchStore = useSearchStore();

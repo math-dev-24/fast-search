@@ -1,5 +1,5 @@
 <template>
-    <NCard class="p-4">
+    <NCard class="p-4 my-2">
         <NFlex vertical align="start">
             <NAutoComplete 
                 v-model:value="searchStore.search" 
