@@ -16,7 +16,7 @@
       <SearchWithAI v-if="modeSearch === 'ai_search'" @search="handleSearchWithAi"/>
       <NDivider/>
 
-      <template v-if="searchStore.isLoaded">
+      <template v-if="searchStore.is_loaded">
         <!-- Statistiques -->
         <NCard :bordered="false" class="mb-6" embedded>
           <template #header>
@@ -71,7 +71,7 @@
                 />
               </template>
               <NGrid :cols="4" :x-gap="12" :y-gap="12" responsive="screen">
-                <NGi v-for="file in searchStore.filterResult.filter(file => file.is_dir).slice(0, maxFolders)"
+                <NGi v-for="file in searchStore.filterResult.filter(f => f.is_dir).slice(0, maxFolders)"
                      :key="file.name">
                   <Folder
                       :file="file"
@@ -107,7 +107,7 @@
               </template>
               <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <CardFile
-                    v-for="file in searchStore.filterResult.filter(file => !file.is_dir).slice(0, maxFiles)"
+                    v-for="file in searchStore.filterResult.filter(f => !f.is_dir).slice(0, maxFiles)"
                     :key="file.name"
                     :file="file"
                     @copyPath="searchStore.copyPath"
@@ -115,7 +115,7 @@
                     @previewFile="handlePreviewFile"
                 />
               </div>
-              <div v-if="searchStore.filterResult.filter(file => !file.is_dir).length > maxFiles"
+              <div v-if="searchStore.filterResult.filter(f => !f.is_dir).length > maxFiles"
                    class="mt-6 text-center">
                 <NButton
                     class="w-full max-w-md"
@@ -124,7 +124,7 @@
                     type="primary"
                     @click="maxFiles += 50"
                 >
-                  📄 Voir {{ Math.min(50, searchStore.filterResult.filter(file => !file.is_dir).length - maxFiles) }}
+                  📄 Voir {{ Math.min(50, searchStore.filterResult.filter(f => !f.is_dir).length - maxFiles) }}
                   fichiers de plus
                 </NButton>
               </div>
