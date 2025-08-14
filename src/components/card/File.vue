@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import type { File } from '../../types';
 import { FileTrayFull, FolderOpen, Open, CopyOutline, EyeOutline } from '@vicons/ionicons5';
 import { NIcon, NCard, NText, NButton, NFlex } from 'naive-ui';
-import { formatPath } from '../../shared/pathFormat.ts';
+import { formatPath } from '../../shared'
 
 const props = defineProps<{
     file: File;

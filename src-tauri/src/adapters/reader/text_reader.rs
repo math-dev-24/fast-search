@@ -20,7 +20,6 @@ impl Reader for TextReader {
             return Err(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", file));
         }
 
-        // Vérifier la taille du fichier (limite à 10MB pour les fichiers texte)
         let metadata = fs::metadata(file_path)
             .map_err(|e| format!("Erreur lors de la lecture des métadonnées: {}", e))?;
         

@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { NModal, NButton, NText, NDescriptions, NDescriptionsItem, NTag, NSpace, NDivider, NFlex, NIcon } from 'naive-ui';
 import { Eye, FolderOutline, DocumentOutline, InformationCircleOutline } from '@vicons/ionicons5';
 import type { File } from '../types';
+import { formatSize, formatDate } from '../shared';
 
 const props = defineProps<{
     show: boolean;
@@ -18,35 +19,14 @@ const show = computed({
     set: (value: boolean) => emit('update:show', value)
 });
 
-// Formater la taille en bytes
-const formatSize = (bytes: number | null): string => {
-    if (bytes === null) return 'N/A';
-    if (bytes === 0) return '0 B';
-    
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-};
-
-// Formater les permissions
 const formatPermissions = (permissions: number | null): string => {
     if (permissions === null) return 'N/A';
     return permissions.toString(8).padStart(4, '0');
 };
 
 // Formater la date
-const formatDate = (dateString: string | null): string => {
-    if (!dateString) return 'N/A';
-    try {
-        return new Date(dateString).toLocaleString('fr-FR');
-    } catch {
-        return dateString;
-    }
-};
 
-// Grouper les métadonnées par catégorie
+
 const metadataGroups = computed(() => {
     if (!props.file) return [];
     
@@ -141,6 +121,7 @@ const openFile = () => {
                     <component :is="file.is_dir ? FolderOutline : DocumentOutline" class="text-2xl text-slate-400 h-10 w-10" />
                     <NFlex vertical>
                         <NText class="text-xl font-bold text-white">{{ file.name }}</NText>
+                      {{file.created_at}}
                     </NFlex>
                 </div>
                 <NButton @click="openFile" type="primary" size="small">

@@ -2,7 +2,7 @@
 import type { File } from '../../types';
 import { FolderOpen } from '@vicons/ionicons5';
 import { NIcon, NCard, NText } from 'naive-ui';
-import { formatPath } from '../../shared/pathFormat.ts';
+import { formatPath } from '../../shared';
 
 defineProps<{
     file: File;
