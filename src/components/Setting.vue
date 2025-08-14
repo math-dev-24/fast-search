@@ -87,7 +87,6 @@ const handleReset = () => {
             tertiary 
             round 
             :disabled="inSync"
-            class="transition-all duration-200 hover:scale-105"
         >
             <template #icon>
                 <NIcon size="16">
