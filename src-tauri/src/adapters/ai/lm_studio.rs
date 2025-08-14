@@ -4,8 +4,6 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Serialize, Deserialize};
 
-
-
 #[derive(Debug, Serialize)]
 struct LMStudioRequest {
     model: String,
@@ -15,16 +13,48 @@ struct LMStudioRequest {
     stream: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+// Support flexible content formats in responses, but still serialize simple String for requests
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct LMStudioMessage {
     role: String,
-    content: String,
+    content: LMStudioContent,
+}
+
+// Content can be a plain string or an array of parts (some providers return parts)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+enum LMStudioContent {
+    Text(String),
+    Parts(Vec<LMStudioContentPart>),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct LMStudioContentPart {
+    #[serde(default)]
+    r#type: Option<String>,
+    #[serde(default)]
+    text: Option<String>,
+}
+
+impl LMStudioContent {
+    fn into_string(self) -> String {
+        match self {
+            LMStudioContent::Text(s) => s,
+            LMStudioContent::Parts(parts) => parts
+                .into_iter()
+                .filter_map(|p| p.text)
+                .collect::<Vec<_>>()
+                .join(""),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
 struct LMStudioResponse {
     choices: Vec<LMStudioChoice>,
-    model: String,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
     usage: Option<LMStudioUsage>,
 }
 
@@ -43,16 +73,16 @@ struct LMStudioModelsResponse {
 #[derive(Debug, Deserialize)]
 struct LMStudioChoice {
     message: LMStudioMessage,
+    #[serde(default)]
     finish_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct LMStudioUsage {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    total_tokens: u32,
+    prompt_tokens: u64,
+    completion_tokens: u64,
+    total_tokens: u64,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct LMStudioErrorResponse {
@@ -66,7 +96,6 @@ struct LMStudioErrorDetail {
     error_type: Option<String>,
     code: Option<String>,
 }
-
 
 pub struct LmStudio {
     client: Client,
@@ -91,12 +120,13 @@ impl LmStudio {
             messages: vec![
                 LMStudioMessage {
                     role: "system".to_string(),
-                    content: prompt,
+                    content: LMStudioContent::Text(prompt),
                 },
-            LMStudioMessage {
-                role: "user".to_string(),
-                content: request.prompt,
-            }],
+                LMStudioMessage {
+                    role: "user".to_string(),
+                    content: LMStudioContent::Text(request.prompt),
+                }
+            ],
             temperature: request.temperature.unwrap_or(0.7),
             max_tokens: request.max_tokens.unwrap_or(500),
             stream: false,
@@ -122,7 +152,6 @@ impl LmStudio {
         }
     }
 }
-
 
 #[async_trait]
 impl Ai for LmStudio {
@@ -153,24 +182,29 @@ impl Ai for LmStudio {
             return Err(self.handle_error_response(response).await);
         }
 
-        let response_body = response
-            .json::<LMStudioResponse>()
+        let body_text = response
+            .text()
             .await
-            .map_err(|e| AiError::RequestFailed(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| AiError::RequestFailed(format!("Failed to read response body: {}", e)))?;
+
+        let response_body: LMStudioResponse = serde_json::from_str(&body_text)
+            .map_err(|e| AiError::RequestFailed(format!(
+                "Failed to parse response: {}. Body: {}",
+                e, body_text
+            )))?;
 
         let choice = response_body
             .choices
             .first()
             .ok_or_else(|| AiError::ParsingError("No choices in response".to_string()))?;
 
-        let content = choice.message.content.clone();
+        let content = choice.message.content.clone().into_string();
 
         Ok(AiResponse {
             content,
-            model_used: response_body.model,
-            tokens_used: response_body.usage.map(|usage| usage.total_tokens),
+            model_used: response_body.model.unwrap_or_else(|| "unknown".to_string()),
+            tokens_used: response_body.usage.map(|usage| usage.total_tokens as u32),
         })
-
     }
 
     async fn list_models(&self) -> Result<Vec<String>, AiError> {

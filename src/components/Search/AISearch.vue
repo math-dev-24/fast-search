@@ -59,6 +59,7 @@ const connectionStatusText = computed(() => {
 
 const handleSearch = async () => {
   const query: SearchQuery | undefined = await aiStore.aiSearch()
+  console.info(query);
   if (!query) return
   emit('search', query)
 }
@@ -135,7 +136,6 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Sélecteur de modèle -->
     <div class="mb-6">
       <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
         Modèle IA
@@ -149,7 +149,6 @@ onMounted(() => {
       />
     </div>
 
-    <!-- Boutons d'action -->
     <NSpace class="action-buttons mt-8" justify="center" size="medium">
       <NButton
           :disabled="!aiStore.naturalSearch?.trim() || aiStore.connectionStatus !== 'connected' || !aiStore.selectedModel"
@@ -166,7 +165,6 @@ onMounted(() => {
       </NButton>
     </NSpace>
 
-    <!-- Indicateur de statut du service -->
     <div v-if="aiStore.connectionStatus !== 'connected' && aiStore.connectionStatus !== 'connecting'" class="mt-6">
       <NAlert
           :show-icon="true"
@@ -176,7 +174,6 @@ onMounted(() => {
       </NAlert>
     </div>
 
-    <!-- Indicateur d'absence de modèle -->
     <div v-if="aiStore.connectionStatus === 'connected' && !aiStore.selectedModel" class="mt-6">
       <NAlert
           :show-icon="true"

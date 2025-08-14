@@ -226,7 +226,6 @@ async function handleSearchWithAi(query: SearchQuery) {
   searchStore.query = query;
   modeSearch.value = 'search';
   await searchStore.searchFiles();
-
 }
 
 </script>
