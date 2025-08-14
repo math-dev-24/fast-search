@@ -14,6 +14,10 @@ import {SearchQuery} from "../../types";
 
 const aiStore = useAiStore();
 
+const props = defineProps<{
+  inLoading: boolean;
+}>()
+
 const emit = defineEmits<{
   (e: 'search', query: SearchQuery): void;
 }>();
@@ -151,7 +155,7 @@ onMounted(() => {
 
     <NSpace class="action-buttons mt-8" justify="center" size="medium">
       <NButton
-          :disabled="!aiStore.naturalSearch?.trim() || aiStore.connectionStatus !== 'connected' || !aiStore.selectedModel"
+          :disabled="!aiStore.naturalSearch?.trim() || aiStore.connectionStatus !== 'connected' || !aiStore.selectedModel || aiStore.inLoading || props.inLoading"
           size="large"
           type="primary"
           @click="handleSearch"

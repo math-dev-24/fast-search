@@ -13,7 +13,7 @@
 
     <NLayoutContent class="p-6">
       <Search v-if="modeSearch === 'search'" @reset="searchStore.reset_search" @search="searchStore.searchFiles"/>
-      <SearchWithAI v-if="modeSearch === 'ai_search'" @search="handleSearchWithAi"/>
+      <SearchWithAI v-if="modeSearch === 'ai_search'" :in-loading="searchStore.in_loading" @search="handleSearchWithAi"/>
       <NDivider/>
 
       <template v-if="searchStore.is_loaded">
