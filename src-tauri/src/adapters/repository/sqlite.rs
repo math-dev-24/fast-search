@@ -37,53 +37,61 @@ impl FileRepository for Db {
         let mut conditions: Vec<String> = Vec::new();
         let mut params: Vec<String> = Vec::new();
         let mut extra_conditions: Vec<String> = Vec::new();
-    
-        // Recherche textuelle dans le nom ou le chemin
+
+        let mut cte_roots_sql: Option<String> = None;
+        let mut cte_roots_params: Vec<String> = Vec::new();
+
         if !query.text.trim().is_empty() {
             if query.search_in_content {
-                // La recherche dans le contenu sera gérée par la jointure FTS
+                // handled by FTS join
             } else {
                 conditions.push("(LOWER(name) LIKE LOWER(?))".to_string());
                 params.push(format!("%{}%", query.text));
             }
         }
-    
-        // Filtres de type de fichier
+
         if query.filters.is_dir {
             conditions.push("is_dir = 1".to_string());
         }
-    
-        // Extensions de fichiers
+
         if !query.filters.file_types.is_empty() {
             let placeholders = query.filters.file_types.iter().map(|_| "?").collect::<Vec<_>>().join(",");
             conditions.push(format!("file_type IN ({})", placeholders));
             params.extend(query.filters.file_types.iter().cloned());
         }
-    
-        // Filtres par dossier
+
         if !query.filters.folders.is_empty() {
-            let folder_conditions: Vec<String> = query.filters.folders
+            // Construire la CTE VALUES (?),(?),(?)...
+            let values = query
+                .filters
+                .folders
                 .iter()
-                .map(|folder| format!("path LIKE '%{}%'", folder))
-                .collect();
-            extra_conditions.push(format!("({})", folder_conditions.join(" OR ")));
+                .map(|_| "(?)")
+                .collect::<Vec<_>>()
+                .join(", ");
+            cte_roots_sql = Some(format!("WITH roots(root) AS (VALUES {}) ", values));
+
+            cte_roots_params.extend(query.filters.folders.iter().cloned());
+
+            extra_conditions.push(
+                "EXISTS (SELECT 1 FROM roots r WHERE files.path >= r.root AND files.path < r.root || CHAR(0x10FFFF))"
+                    .to_string(),
+            );
         }
-    
-        // Filtres de taille
+
         if query.filters.size_limit.len() >= 2 && (query.filters.size_limit[0] > 0 || query.filters.size_limit[1] > 0) {
-            let min = query.filters.size_limit[0] as i64 * 1024 * 1024; // Conversion en bytes
+            let min = query.filters.size_limit[0] as i64 * 1024 * 1024;
             let max = if query.filters.size_limit[1] > 0 {
                 query.filters.size_limit[1] as i64 * 1024 * 1024
             } else {
                 i64::MAX
             };
-    
+
             conditions.push("size >= ? AND size <= ?".to_string());
             params.push(min.to_string());
             params.push(max.to_string());
         }
-    
-        // Filtres de dates
+
         if query.filters.date_range.len() >= 2 && (query.filters.date_range[0] > 0 || query.filters.date_range[1] > 0) {
             let min = query.filters.date_range[0] as i64;
             let max = if query.filters.date_range[1] > 0 {
@@ -91,38 +99,36 @@ impl FileRepository for Db {
             } else {
                 i64::MAX
             };
-    
+
             if query.filters.date_mode == DateMode::Create {
                 conditions.push("created_at >= ? AND created_at <= ?".to_string());
             } else {
                 conditions.push("last_modified >= ? AND last_modified <= ?".to_string());
             }
-    
+
             params.push(min.to_string());
             params.push(max.to_string());
         }
-    
-        // Recherche par pattern de chemin
+
         if let Some(path_pattern) = &query.path_pattern {
             if !path_pattern.trim().is_empty() {
                 conditions.push("path LIKE ?".to_string());
                 params.push(format!("%{}%", path_pattern));
             }
         }
-    
-        // Combine toutes les conditions
-        let all_conditions: Vec<String> = conditions.into_iter()
+
+        let all_conditions: Vec<String> = conditions
+            .into_iter()
             .map(|s| s.to_string())
             .chain(extra_conditions.into_iter())
             .collect();
-        
+
         let where_clause = if all_conditions.is_empty() {
             "1=1".to_string()
         } else {
             all_conditions.join(" AND ")
         };
-    
-        // Construction de l'ORDER BY avec COLLATE NOCASE pour les chaînes
+
         let order_by = match query.sort_by {
             SortBy::Name => "name COLLATE NOCASE",
             SortBy::Size => "size",
@@ -130,45 +136,51 @@ impl FileRepository for Db {
             SortBy::CreatedAt => "created_at",
             SortBy::AccessedAt => "accessed_at",
         };
-        
+
         let sort_order = match query.sort_order {
             SortOrder::Asc => "ASC",
             SortOrder::Desc => "DESC",
         };
-    
-        // Création de la requête SQL
+
+        let cte_prefix = cte_roots_sql.as_deref().unwrap_or("");
+
         let sql_query = if query.search_in_content && !query.text.trim().is_empty() {
-            // Requête avec jointure FTS pour la recherche dans le contenu
             format!(
-                "SELECT files.* FROM files \
+                "{}SELECT files.* FROM files \
                  JOIN fts_content ON files.id = fts_content.file_id \
                  WHERE fts_content.content MATCH ? AND {} \
-                 ORDER BY files.{} {} LIMIT {} OFFSET {}",
-                where_clause, order_by, sort_order, query.limit, query.offset
+                 ORDER BY bm25(fts_content) ASC, files.{} {} LIMIT {} OFFSET {}",
+                cte_prefix, where_clause, order_by, sort_order, query.limit, query.offset
             )
         } else {
-            // Requête sans jointure
             format!(
-                "SELECT * FROM files \
+                "{}SELECT * FROM files \
                  WHERE {} \
                  ORDER BY {} {} LIMIT {} OFFSET {}",
-                where_clause, order_by, sort_order, query.limit, query.offset
+                cte_prefix, where_clause, order_by, sort_order, query.limit, query.offset
             )
         };
-    
-        // Préparation de la requête
+
         let mut stmt = self.conn.prepare(&sql_query)?;
-    
-        // Insertion des paramètres
-        let all_params: Vec<&dyn rusqlite::ToSql> = if query.search_in_content && !query.text.trim().is_empty() {
-            let mut merged = vec![&query.text as &dyn rusqlite::ToSql];
-            merged.extend(params.iter().map(|s| s as &dyn rusqlite::ToSql));
-            merged  
-        } else {
-            params.iter().map(|s| s as &dyn rusqlite::ToSql).collect()
-        };
-    
-        // Exécution et mapping
+
+        let mut dyn_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if !cte_roots_params.is_empty() {
+            for v in &cte_roots_params {
+                dyn_params.push(Box::new(v.clone()));
+            }
+        }
+
+        if query.search_in_content && !query.text.trim().is_empty() {
+            dyn_params.push(Box::new(query.text.clone()));
+        }
+
+        for v in &params {
+            dyn_params.push(Box::new(v.clone()));
+        }
+
+        let all_params: Vec<&dyn rusqlite::ToSql> = dyn_params.iter().map(|b| b.as_ref() as _).collect();
+
         let result = stmt
             .query_map(rusqlite::params_from_iter(all_params), |row| {
                 Ok(File {
@@ -200,12 +212,11 @@ impl FileRepository for Db {
                 })
             })?
             .collect::<SqliteResult<Vec<_>>>()?;
-    
+
         Ok(result)
     }
 
     fn get_stat(&self) -> SqliteResult<Stat> {
-        // Optimisation: une seule requête au lieu de trois
         let mut stmt = self.conn.prepare(
             "SELECT 
                 COUNT(CASE WHEN is_dir = 0 THEN 1 END) as nb_files,
@@ -366,20 +377,17 @@ impl FileRepository for Db {
 
         let tx = self.conn.transaction()?;
 
-        // D'abord, récupérer l'ID du fichier
         let file_id: i64 = tx.query_row(
             "SELECT id FROM files WHERE path = ?",
             [file.path.to_str().unwrap()],
             |row| row.get(0)
         )?;
 
-        // Insérer le contenu dans la table FTS
         tx.execute(
             "INSERT INTO fts_content (content, file_id) VALUES (?, ?)",
             rusqlite::params![content_hash, file_id]
         )?;
 
-        // Mettre à jour le statut d'indexation du fichier
         tx.execute(
             "UPDATE files SET content_indexed = ?, is_indexable = ? WHERE path = ?", 
             rusqlite::params![true, is_indexable, file.path.to_str().unwrap()]

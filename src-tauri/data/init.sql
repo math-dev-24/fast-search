@@ -40,10 +40,13 @@ CREATE TABLE IF NOT EXISTS paths (
     path TEXT NOT NULL UNIQUE
 );
 
--- Table de recherche plein texte pour le contenu des fichiers
+-- Table de recherche plein texte pour le contenu des fichiers (unicode tokenizer, diacritics folding, et préfixes)
 CREATE VIRTUAL TABLE IF NOT EXISTS fts_content USING fts5(
     content,
-    file_id UNINDEXED
+    file_id UNINDEXED,
+    tokenize = 'unicode61 remove_diacritics 2',
+    prefix = '3 4',
+    detail = 'none'
 );
 
 -- Index pour optimiser les performances de recherche
@@ -69,6 +72,15 @@ CREATE INDEX IF NOT EXISTS idx_files_line_count ON files(line_count);
 CREATE INDEX IF NOT EXISTS idx_files_word_count ON files(word_count);
 CREATE INDEX IF NOT EXISTS idx_files_is_encrypted ON files(is_encrypted);
 
+-- Pour les recherches les plus courantes
+CREATE INDEX IF NOT EXISTS idx_files_type_size ON files(file_type, size);
+CREATE INDEX IF NOT EXISTS idx_files_dir_modified ON files(is_dir, last_modified);
+CREATE INDEX IF NOT EXISTS idx_files_indexed_type ON files(is_indexed, file_type);
+CREATE INDEX IF NOT EXISTS idx_files_path_name ON files(path, name);
+
+-- Pour les filtres complexes
+CREATE INDEX IF NOT EXISTS idx_files_flags ON files(is_hidden, is_system, is_readonly);
+
 -- Index pour les autres tables
 CREATE INDEX IF NOT EXISTS idx_types_name ON types(name);
 CREATE INDEX IF NOT EXISTS idx_paths_path ON paths(path);
@@ -81,8 +93,17 @@ INSERT OR IGNORE INTO types (name) VALUES
     ('gz'), ('rs'), ('py'), ('java'), ('cpp'), ('c'), ('go'), ('php'), ('rb'),
     ('swift'), ('kt'), ('exe'), ('dll'), ('so'), ('dylib');
 
+-- Nettoyage d’index redondants (sécurisé si exécuté plusieurs fois)
+DROP INDEX IF EXISTS idx_files_path;
+DROP INDEX IF EXISTS idx_files_path_name;
+DROP INDEX IF EXISTS idx_files_is_dir;
+DROP INDEX IF EXISTS idx_files_file_type;
+DROP INDEX IF EXISTS idx_files_is_hidden;
+
+ANALYZE;
+
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 PRAGMA cache_size = 10000;
 PRAGMA temp_store = MEMORY;
-PRAGMA mmap_size = 268435456; 
+PRAGMA mmap_size = 268435456;

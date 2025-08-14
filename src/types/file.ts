@@ -1,12 +1,14 @@
+export type dateFile = {secs_since_epoch: number, nanos_since_epoch: number}
+
 export interface File {
     path: string;
     name: string;
     is_dir: boolean;
     file_type: string | null;
     size: number | null;
-    last_modified: string | null;
-    created_at: string | null;
-    accessed_at: string | null;
+    last_modified: dateFile | null;
+    created_at: dateFile | null;
+    accessed_at: dateFile | null;
     is_indexed: boolean;
     content_indexed: boolean;
     is_indexable: boolean;

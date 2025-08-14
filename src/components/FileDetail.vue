@@ -40,7 +40,7 @@ const metadataGroups = computed(() => {
                 { label: 'Nom', value: file.name },
                 { label: 'Chemin', value: file.path },
                 { label: 'Type', value: file.is_dir ? 'Dossier' : 'Fichier' },
-                { label: 'Taille', value: formatSize(file.size) },
+                { label: 'Taille', value: formatSize(file.size || 0) },
                 { label: 'Type MIME', value: file.mime_type || 'N/A' },
                 { label: 'Encodage', value: file.encoding || 'N/A' },
             ]
