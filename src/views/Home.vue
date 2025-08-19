@@ -155,12 +155,12 @@ import FileDetail from '../components/FileDetail.vue';
 import {useSearchStore} from '../shared';
 import type {File, SearchQuery} from '../types';
 import Search from "../components/Search/Search.vue";
+import CardFile from "../components/File/CardFile.vue";
 
 
 const searchStore = useSearchStore();
 const modeSearch = ref<string>('search');
 const maxFiles = ref<number>(20);
-const maxFolders = ref<number>(8);
 
 const detailFile = ref(null as null | File);
 const showDetail = ref(false);
