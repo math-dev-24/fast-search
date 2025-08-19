@@ -39,7 +39,7 @@ export const useSettingStore = defineStore("settingStore", {
         async savePaths() {
             try {
                 this.inLoading = true;
-                await invoke('save_path', {paths: this.paths});
+                await invoke('save_paths', {paths: this.paths});
                 this.status = "Ok";
             } catch (e) {
                 console.error(e);

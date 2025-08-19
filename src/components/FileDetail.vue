@@ -121,7 +121,7 @@ const openFile = () => {
                     <component :is="file.is_dir ? FolderOutline : DocumentOutline" class="text-2xl text-slate-400 h-10 w-10" />
                     <NFlex vertical>
                         <NText class="text-xl font-bold text-white">{{ file.name }}</NText>
-                      {{file.created_at}}
+                      {{formatDate(file.created_at)}}
                     </NFlex>
                 </div>
                 <NButton @click="openFile" type="primary" size="small">
