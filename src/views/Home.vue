@@ -17,7 +17,6 @@
       <NDivider/>
 
       <template v-if="searchStore.is_loaded">
-        <!-- Statistiques -->
         <NCard :bordered="false" class="mb-2" embedded>
           <template #header>
             <NText class="text-lg font-medium">📊 Statistiques de recherche</NText>
@@ -58,44 +57,10 @@
 
         <Filter v-model="searchStore"/>
 
-        <!-- Résultats -->
-        <NSpace v-if="searchStore.filterResult.length > 0" size="large" vertical>
-          <!-- Section Dossiers -->
-          <div v-if="searchStore.filterResult.filter(file => file.is_dir).length > 0">
-            <NCard :bordered="false" class="mb-6" embedded title="📁 Dossiers">
-              <template #header-extra>
-                <NBadge
-                    :max="999"
-                    :value="searchStore.filterResult.filter(file => file.is_dir).length"
-                    type="info"
-                />
-              </template>
-              <NGrid :cols="4" :x-gap="12" :y-gap="12" responsive="screen">
-                <NGi v-for="file in searchStore.filterResult.filter(f => f.is_dir).slice(0, maxFolders)"
-                     :key="file.name">
-                  <Folder
-                      :file="file"
-                      @openFile="searchStore.openFile"
-                  />
-                </NGi>
-              </NGrid>
-              <div v-if="searchStore.filterResult.filter(file => file.is_dir).length > maxFolders"
-                   class="mt-4 text-center">
-                <NButton
-                    class="w-full max-w-md"
-                    secondary
-                    size="large"
-                    type="primary"
-                    @click="maxFolders += 10"
-                >
-                  📂 Voir {{ Math.min(10, searchStore.filterResult.filter(file => file.is_dir).length - maxFolders) }}
-                  dossiers de plus
-                </NButton>
-              </div>
-            </NCard>
-          </div>
 
-          <!-- Section Fichiers -->
+        <NSpace v-if="searchStore.filterResult.length > 0" size="large" vertical>
+          <Folder  />
+
           <div v-if="searchStore.filterResult.filter(file => !file.is_dir).length > 0">
             <NCard :bordered="false" embedded title="📄 Fichiers">
               <template #header-extra>
@@ -184,8 +149,7 @@ import {
   useMessage
 } from 'naive-ui';
 import SearchWithAI from '../components/Search/AISearch.vue';
-import CardFile from '../components/card/File.vue';
-import Folder from '../components/card/Folder.vue';
+import Folder from '../components/Folder/index.vue';
 import Filter from '../components/Filter.vue';
 import FileDetail from '../components/FileDetail.vue';
 import {useSearchStore} from '../shared';

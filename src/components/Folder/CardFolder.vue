@@ -5,7 +5,7 @@ import { NIcon, NCard, NText } from 'naive-ui';
 import { formatPath } from '../../shared';
 
 defineProps<{
-    file: File;
+    folder: File;
 }>();
 
 const emit = defineEmits<{
@@ -17,7 +17,7 @@ const emit = defineEmits<{
 <template>
     <NCard 
         hoverable 
-        @click="emit('openFile', file.path)" 
+        @click="emit('openFile', folder.path)"
         class="cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 rounded-xl border border-gray-200 hover:border-blue-500"
         size="small"
     >
@@ -30,11 +30,11 @@ const emit = defineEmits<{
             
             <div class="flex-1 min-w-0">
                 <NText class="block mb-1 overflow-hidden text-ellipsis whitespace-nowrap font-semibold">
-                    {{ file.name }}
+                  {{ folder.name }}
                 </NText>
                 
                 <NText class="block overflow-hidden text-ellipsis whitespace-nowrap leading-tight text-xs text-gray-500" depth="3">
-                    {{ formatPath(file.path) }}
+                  {{ formatPath(folder.path) }}
                 </NText>
             </div>
         </div>
