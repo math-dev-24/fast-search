@@ -1,22 +1,25 @@
 <script setup lang="ts">
 import { NBadge, NCollapse, NCollapseItem, NGi, NGrid, NTabs, NTabPane, NButton, NTable, NCard } from "naive-ui";
-import { useSearchStore } from "../../shared";
+import type { File } from "../../types";
 import Card from "./CardFolder.vue";
 import Line from "./LineFolder.vue";
-import { computed, ref } from "vue";
+import { ref } from "vue";
 
-const searchStore = useSearchStore();
+defineProps<{
+  folders: File[]
+}>()
+
+const emit = defineEmits<{
+  (e: 'openFile', path: string): void
+}>()
+
 const maxFoldersCard = ref<number>(8);
 const maxFoldersLine = ref<number>(15);
-
-const folders = computed(() => {
-  return searchStore.filterResult.filter(f => f.is_dir)
-})
 
 </script>
 
 <template>
-  <NCard v-if="searchStore.filterResult.filter(file => file.is_dir).length > 0">
+  <NCard v-if="folders.length > 0">
     <NCollapse class="mb-6">
       <NCollapseItem name="folders">
         <template #header>
@@ -24,7 +27,7 @@ const folders = computed(() => {
             <div>📁 Dossiers</div>
             <NBadge
               :max="999"
-              :value="searchStore.filterResult.filter(file => file.is_dir).length"
+              :value="folders.length"
               type="info"
             />
           </div>
@@ -38,11 +41,11 @@ const folders = computed(() => {
               >
                 <Card
                   :folder="folder"
-                  @openFile="searchStore.openFile"
+                  @openFile="emit('openFile', folder.path)"
                 />
               </NGi>
             </NGrid>
-            <div v-if="searchStore.filterResult.filter(file => file.is_dir).length > maxFoldersCard"
+            <div v-if="folders.length > maxFoldersCard"
                  class="mt-4 text-center">
               <NButton
                 class="w-full max-w-md"
@@ -71,7 +74,7 @@ const folders = computed(() => {
                   v-for="folder in folders.slice(0, maxFoldersLine)"
                   :key="folder.name"
                   :folder="folder"
-                  @openFile="searchStore.openFile"
+                  @openFile="emit('openFile', folder.path)"
                 />
                 <tr v-if="folders.length > maxFoldersLine" class="border-t border-gray-200">
                   <td colspan="3" class="text-center">
