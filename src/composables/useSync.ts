@@ -31,6 +31,13 @@ const EVENTS = {
     },
     STAT: {
         UPDATED: "stat_updated"
+    },
+    WATCHER: {
+        STARTED: "watcher_started",
+        STOPED: "watcher_stopped",
+        ERROR: "watcher_error",
+        CREATED: "watcher_created",
+        DELETED: "watcher_deleted"
     }
 } as const;
 
@@ -75,8 +82,8 @@ export const useSync = () => {
     const overallProgress = computed(() => {
         if (!inSync.value) return 0;
 
-        const scanWeight = 0.5; // Le scan représente 50% du travail total
-        const indexWeight = 0.5; // L'indexation représente 50% du travail total
+        const scanWeight = 0.5;
+        const indexWeight = 0.5;
 
         const scanProgress = scanState.value.isActive ? scanState.value.progress : (scanState.value.success ? 100 : 0);
         const indexProgress = indexState.value.isActive ? indexState.value.progress : (indexState.value.success ? 100 : 0);
@@ -148,23 +155,19 @@ export const useSync = () => {
 
     const listeners: UnlistenFn[] = [];
 
-    // Fonction utilitaire pour gérer les erreurs d'événements
     const handleEventError = (eventName: string, error: any) => {
         console.error(`Erreur lors du traitement de l'événement ${eventName}:`, error);
 
-        // Afficher l'erreur dans l'interface utilisateur
         const errorMessage = `Erreur de communication: ${error}`;
         scanState.value.error = errorMessage;
         indexState.value.error = errorMessage;
 
-        // Reset automatique après 10 secondes
         setTimeout(() => {
             scanState.value.error = "";
             indexState.value.error = "";
         }, 10000);
     };
 
-    // Fonction utilitaire pour reset un état de processus
     const resetProcessState = (state: ProcessState, isActive: boolean = false) => {
         state.isActive = isActive;
         state.progress = 0;
@@ -179,14 +182,12 @@ export const useSync = () => {
 
     const startSync = async () => {
         try {
-            // Reset des états avant de commencer
             resetProcessState(scanState.value, true);
             resetProcessState(indexState.value, true);
 
             scanState.value.message = "Initialisation du scan des fichiers...";
             indexState.value.message = "Initialisation de l'indexation du contenu...";
 
-            // Diagnostic préventif des chemins
             try {
                 const paths = await invoke("get_all_paths");
                 if (Array.isArray(paths) && paths.length > 0) {
@@ -230,7 +231,6 @@ export const useSync = () => {
 
     onMounted(async () => {
         try {
-            // Événements pour le scan des fichiers
             listeners.push(
                 await listen(EVENTS.SCAN.STARTED, () => {
                     resetProcessState(scanState.value, true);
@@ -319,7 +319,6 @@ export const useSync = () => {
                 })
             );
 
-            // Événements pour l'indexation du contenu
             listeners.push(
                 await listen(EVENTS.INDEX.STARTED, () => {
                     resetProcessState(indexState.value, true);
@@ -353,7 +352,6 @@ export const useSync = () => {
                         indexState.value.phase = "finished";
                         indexState.value.success = true;
 
-                        // Reset après 3 secondes
                         setTimeout(() => {
                             indexState.value.success = false;
                             indexState.value.progress = 0;
@@ -378,6 +376,24 @@ export const useSync = () => {
                     } catch (error) {
                         handleEventError(EVENTS.INDEX.ERROR, error);
                     }
+                })
+            );
+
+            listeners.push(
+                await listen(EVENTS.WATCHER.STARTED, async (event: any) => {
+                    console.log("Watcher started:", event);
+                })
+            );
+
+            listeners.push(
+                await listen(EVENTS.WATCHER.STOPED, async (event: any) => {
+                    console.log("Watcher stopped:", event);
+                })
+            );
+
+            listeners.push(
+                await listen(EVENTS.WATCHER.CREATED, async (event: any) => {
+                    console.log("Watcher created:", event);
                 })
             );
 

@@ -67,7 +67,6 @@ export const useSearchStore = defineStore('search', {
             this.in_loading = true;
             this.is_loaded = false;
             try {
-                console.log(JSON.stringify(this.query));
                 this.result = await invoke('search_files', {query: this.query});
                 this.is_loaded = true;
             } catch (error) {
