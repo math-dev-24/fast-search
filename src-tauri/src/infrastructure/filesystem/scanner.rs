@@ -11,7 +11,7 @@ use crate::domain::entities::scan::{ScanProgress, ScanCollected, InsertProgress,
 use crate::domain::entities::progress::ScanProgressTracker;
 use crate::infrastructure::filesystem::collect::collect_files_and_folders;
 
-const CHUNK_SIZE: usize = 1000;
+const CHUNK_SIZE: usize = 500;
 
 pub fn scan_files_async(window: WebviewWindow, paths: Vec<String>) {
     tauri::async_runtime::spawn(async move {

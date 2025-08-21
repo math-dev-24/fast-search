@@ -259,19 +259,3 @@ impl FileWatcherManager {
         }
     }
 }
-
-pub fn start_file_watching_async(window: WebviewWindow, paths: Vec<String>) {
-    tauri::async_runtime::spawn(async move {
-        let mut watcher = AsyncFileWatcher::new(window.clone());
-
-        match watcher.start_watching(paths.clone()) {
-            Ok(()) => {
-                println!("File watcher started successfully for {} paths", paths.len());
-            },
-            Err(e) => {
-                emit_error_event(&window, EVENT_WATCHER_ERROR, format!("Failed to start file watcher: {}", e));
-                eprintln!("Failed to start file watcher: {}", e);
-            }
-        }
-    });
-}

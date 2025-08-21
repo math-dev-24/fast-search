@@ -4,3 +4,4 @@ pub mod scan;
 pub mod search;
 pub mod progress;
 pub mod ai;
+pub mod query_builder;

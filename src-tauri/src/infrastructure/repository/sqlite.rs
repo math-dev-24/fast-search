@@ -6,17 +6,24 @@ use crate::domain::entities::stat::Stat;
 use crate::domain::entities::search::{SearchQuery, DateMode, SortBy, SortOrder};
 use crate::domain::ports::repository::FileRepository;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use crate::domain::entities::query_builder::QueryBuilder;
 use crate::shared::errors::AppResult;
+
 
 pub struct Db {
     pub conn: Connection,
+    pub types_cache: Option<HashSet<String>>
 }
 
 impl FileRepository for Db {
-
     fn new(path: &str) -> AppResult<Db> {
+
         let conn = Connection::open(path)?;
-        Ok(Self { conn })
+
+        Ok(Self {
+            conn,
+            types_cache: None,
+        })
     }
 
     fn init(&self) -> AppResult<()> {
@@ -64,56 +71,68 @@ impl FileRepository for Db {
     }
 
     fn get_stat(&self) -> AppResult<Stat> {
-        let mut stmt = self.conn.prepare(
-            "SELECT
-                COUNT(CASE WHEN is_dir = 0 THEN 1 END) as nb_files,
-                COUNT(CASE WHEN is_dir = 1 THEN 1 END) as nb_folders,
-                COALESCE(SUM(CASE WHEN is_dir = 0 THEN size ELSE 0 END), 0) as total_size
-             FROM files"
-        )?;
+        let mut stmt = self.conn.prepare("
+            WITH stats AS (
+                SELECT
+                    COUNT(CASE WHEN is_dir = 0 THEN 1 END) as nb_files,
+                    COUNT(CASE WHEN is_dir = 1 THEN 1 END) as nb_folders,
+                    COALESCE(SUM(CASE WHEN is_dir = 0 THEN size ELSE 0 END), 0) as total_size,
+                    COUNT(CASE WHEN is_indexed = 1 AND is_indexable = 1 THEN 1 END) as indexed_files,
+                    COUNT(CASE WHEN is_indexed = 0 AND is_indexable = 1 THEN 1 END) as unindexed_files,
+                    COUNT(CASE WHEN content_indexed = 1 AND is_indexable = 1 THEN 1 END) as content_indexed_files,
+                    COUNT(CASE WHEN content_indexed = 0 AND is_indexable = 1 THEN 1 END) as uncontent_indexed_files,
+                    COUNT(CASE WHEN is_indexable = 0 THEN 1 END) as unindexable_files
+                FROM files
+            )
+            SELECT
+                nb_files,
+                nb_folders,
+                total_size,
+                indexed_files,
+                unindexed_files,
+                content_indexed_files,
+                uncontent_indexed_files,
+                unindexable_files
+            FROM stats
+        ")?;
 
         let result = stmt.query_row([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, i64>(2)?
-            ))
+            let nb_files: i64 = row.get(0)?;
+            let nb_folders: i64 = row.get(1)?;
+            let total_size: i64 = row.get(2)?;
+            let indexed_files: i64 = row.get(3)?;
+            let unindexed_files: i64 = row.get(4)?;
+            let content_indexed_files: i64 = row.get(5)?;
+            let uncontent_indexed_files: i64 = row.get(6)?;
+            let unindexable_files: i64 = row.get(7)?;
+
+            let indexed_percentage = if indexed_files + unindexed_files > 0 {
+                (indexed_files as f64 / (indexed_files + unindexed_files) as f64) * 100.0
+            } else {
+                0.0
+            };
+
+            let total_indexable = content_indexed_files + uncontent_indexed_files;
+            let content_indexed_percentage = if total_indexable > 0 {
+                (content_indexed_files as f64 / total_indexable as f64) * 100.0
+            } else {
+                0.0
+            };
+
+            Ok(Stat {
+                nb_files: nb_files as u32,
+                nb_folders: nb_folders as u32,
+                total_size: total_size as u64,
+                indexed_files: indexed_files as u32,
+                unindexed_files: unindexed_files as u32,
+                indexed_percentage,
+                content_indexed_files: content_indexed_files as u32,
+                uncontent_indexed_files: uncontent_indexed_files as u32,
+                content_indexed_percentage,
+                unindexable_files: unindexable_files as u32,
+            })
         })?;
-
-        // Indexation des fichiers
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 1 AND is_indexable = 1")?;
-        let indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
-
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 0 AND is_indexable = 1")?;
-        let unindexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
-
-        let indexed_percentage = (indexed_files as f64 / (indexed_files + unindexed_files) as f64) * 100.0;
-
-        // Indexation du contenu
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexable = 0")?;
-        let unindexable_files: i64 = stmt.query_row([], |row| row.get(0))?;
-
-
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 1 AND is_indexable = 1")?;
-        let content_indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
-
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 0 AND is_indexable = 1")?;
-        let uncontent_indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
-
-        let content_indexed_percentage = (content_indexed_files as f64 / (content_indexed_files + uncontent_indexed_files + unindexable_files) as f64) * 100.0;
-
-        Ok(Stat {
-            nb_files: result.0 as u32,
-            nb_folders: result.1 as u32,
-            total_size: result.2 as u64,
-            indexed_files: indexed_files as u32,
-            unindexed_files: unindexed_files as u32,
-            indexed_percentage: indexed_percentage as f64,
-            content_indexed_files: content_indexed_files as u32,
-            uncontent_indexed_files: uncontent_indexed_files as u32,
-            content_indexed_percentage: content_indexed_percentage as f64,
-            unindexable_files: unindexable_files as u32
-        })
+        Ok(result)
     }
 
     fn get_all_types(&self) -> AppResult<Vec<String>> {
@@ -141,52 +160,46 @@ impl FileRepository for Db {
         Ok(folders)
     }
 
-    fn search(
-        &self,
-        query: &SearchQuery,
-    ) -> AppResult<Vec<File>> {
-        let mut conditions: Vec<String> = Vec::new();
-        let mut params: Vec<String> = Vec::new();
-        let mut extra_conditions: Vec<String> = Vec::new();
-
-        let mut cte_roots_sql: Option<String> = None;
-        let mut cte_roots_params: Vec<String> = Vec::new();
+    fn search(&self, query: &SearchQuery) -> AppResult<Vec<File>> {
+        let mut builder = QueryBuilder::new();
 
         if !query.text.trim().is_empty() {
             if query.search_in_content {
-                // handled by FTS join
+                let fts_query = query.text.replace("\"", "\"\"");
+                builder.add_fts_condition(format!("\"{}\"", fts_query));
             } else {
-                conditions.push("(LOWER(name) LIKE LOWER(?))".to_string());
-                params.push(format!("%{}%", query.text));
+                builder.add_condition(
+                    "(LOWER(name) LIKE LOWER(?))".to_string(),
+                    Box::new(format!("%{}%", query.text))
+                );
             }
         }
 
         if query.filters.is_dir {
-            conditions.push("is_dir = 1".to_string());
+            builder.add_simple_condition("is_dir = 1".to_string());
         }
 
         if !query.filters.file_types.is_empty() {
             let placeholders = query.filters.file_types.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-            conditions.push(format!("file_type IN ({})", placeholders));
-            params.extend(query.filters.file_types.iter().cloned());
+            builder.add_simple_condition(format!("file_type IN ({})", placeholders));
+
+            for file_type in &query.filters.file_types {
+                builder.params.push(Box::new(file_type.clone()));
+            }
         }
 
         if !query.filters.folders.is_empty() {
-            // Construire la CTE VALUES (?),(?),(?)...
-            let values = query
-                .filters
-                .folders
-                .iter()
-                .map(|_| "(?)")
-                .collect::<Vec<_>>()
-                .join(", ");
-            cte_roots_sql = Some(format!("WITH roots(root) AS (VALUES {}) ", values));
+            let values: Vec<String> = query.filters.folders.iter().map(|_| "(?)".to_string()).collect();
+            let cte_condition = values.join(", ");
 
-            cte_roots_params.extend(query.filters.folders.iter().cloned());
+            let mut cte_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+            for folder in &query.filters.folders {
+                cte_params.push(Box::new(folder.clone()));
+            }
 
-            extra_conditions.push(
-                "EXISTS (SELECT 1 FROM roots r WHERE files.path >= r.root AND files.path < r.root || CHAR(0x10FFFF))"
-                    .to_string(),
+            builder.add_cte_condition(cte_condition, cte_params);
+            builder.add_simple_condition(
+                "EXISTS (SELECT 1 FROM roots r WHERE files.path >= r.root AND files.path < r.root || CHAR(0x10FFFF))".to_string()
             );
         }
 
@@ -198,9 +211,9 @@ impl FileRepository for Db {
                 i64::MAX
             };
 
-            conditions.push("size >= ? AND size <= ?".to_string());
-            params.push(min.to_string());
-            params.push(max.to_string());
+            builder.add_simple_condition("size >= ? AND size <= ?".to_string());
+            builder.params.push(Box::new(min));
+            builder.params.push(Box::new(max));
         }
 
         if query.filters.date_range.len() >= 2 && (query.filters.date_range[0] > 0 || query.filters.date_range[1] > 0) {
@@ -211,34 +224,24 @@ impl FileRepository for Db {
                 i64::MAX
             };
 
-            if query.filters.date_mode == DateMode::Create {
-                conditions.push("created_at >= ? AND created_at <= ?".to_string());
-            } else {
-                conditions.push("last_modified >= ? AND last_modified <= ?".to_string());
-            }
+            let date_column = match query.filters.date_mode {
+                DateMode::Create => "created_at",
+                _ => "last_modified",
+            };
 
-            params.push(min.to_string());
-            params.push(max.to_string());
+            builder.add_simple_condition(format!("{} >= ? AND {} <= ?", date_column, date_column));
+            builder.params.push(Box::new(min));
+            builder.params.push(Box::new(max));
         }
 
         if let Some(path_pattern) = &query.path_pattern {
             if !path_pattern.trim().is_empty() {
-                conditions.push("path LIKE ?".to_string());
-                params.push(format!("%{}%", path_pattern));
+                builder.add_condition(
+                    "path LIKE ?".to_string(),
+                    Box::new(format!("%{}%", path_pattern))
+                );
             }
         }
-
-        let all_conditions: Vec<String> = conditions
-            .into_iter()
-            .map(|s| s.to_string())
-            .chain(extra_conditions.into_iter())
-            .collect();
-
-        let where_clause = if all_conditions.is_empty() {
-            "1=1".to_string()
-        } else {
-            all_conditions.join(" AND ")
-        };
 
         let order_by = match query.sort_by {
             SortBy::Name => "name COLLATE NOCASE",
@@ -253,78 +256,8 @@ impl FileRepository for Db {
             SortOrder::Desc => "DESC",
         };
 
-        let cte_prefix = cte_roots_sql.as_deref().unwrap_or("");
-
-        let sql_query = if query.search_in_content && !query.text.trim().is_empty() {
-            format!(
-                "{}SELECT files.* FROM files \
-                 JOIN fts_content ON files.id = fts_content.file_id \
-                 WHERE fts_content.content MATCH ? AND {} \
-                 ORDER BY bm25(fts_content) ASC, files.{} {} LIMIT {} OFFSET {}",
-                cte_prefix, where_clause, order_by, sort_order, query.limit, query.offset
-            )
-        } else {
-            format!(
-                "{}SELECT * FROM files \
-                 WHERE {} \
-                 ORDER BY {} {} LIMIT {} OFFSET {}",
-                cte_prefix, where_clause, order_by, sort_order, query.limit, query.offset
-            )
-        };
-
-        let mut stmt = self.conn.prepare(&sql_query)?;
-
-        let mut dyn_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
-
-        if !cte_roots_params.is_empty() {
-            for v in &cte_roots_params {
-                dyn_params.push(Box::new(v.clone()));
-            }
-        }
-
-        if query.search_in_content && !query.text.trim().is_empty() {
-            dyn_params.push(Box::new(query.text.clone()));
-        }
-
-        for v in &params {
-            dyn_params.push(Box::new(v.clone()));
-        }
-
-        let all_params: Vec<&dyn rusqlite::ToSql> = dyn_params.iter().map(|b| b.as_ref() as _).collect();
-
-        let result = stmt
-            .query_map(rusqlite::params_from_iter(all_params), |row| {
-                Ok(File {
-                    path: PathBuf::from(row.get::<_, String>(1)?),
-                    name: row.get(2)?,
-                    is_dir: row.get(3)?,
-                    file_type: row.get(4)?,
-                    size: row.get(5)?,
-                    last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
-                    created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
-                    accessed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(8)?),
-                    is_indexed: row.get(9)?,
-                    content_indexed: row.get(10)?,
-                    is_indexable: row.get(11)?,
-                    is_hidden: row.get(12)?,
-                    is_readonly: row.get(13)?,
-                    is_system: row.get(14)?,
-                    is_executable: row.get(15)?,
-                    is_symlink: row.get(16)?,
-                    permissions: row.get(17)?,
-                    owner: row.get(18)?,
-                    group: row.get(19)?,
-                    mime_type: row.get(20)?,
-                    encoding: row.get(21)?,
-                    line_count: row.get(22)?,
-                    word_count: row.get(23)?,
-                    checksum: row.get(24)?,
-                    is_encrypted: row.get(25)?,
-                })
-            })?
-            .collect::<SqliteResult<Vec<_>>>()?;
-
-        Ok(result)
+        let (sql, params) = builder.build(order_by, sort_order, query.limit, query.offset);
+        self.execute_search_query(&sql, &params)
     }
 
     fn reset_data(&self) -> AppResult<()> {
@@ -360,42 +293,29 @@ impl FileRepository for Db {
 
     fn get_uncontent_indexed_files(&self) -> AppResult<Vec<File>> {
         let mut stmt = self.conn.prepare("SELECT * FROM files WHERE content_indexed = 0 AND is_indexable = 1")?;
-        let files: Vec<File> = stmt.query_map([], |row| {
-            Ok(File {
-                path: PathBuf::from(row.get::<_, String>(1)?),
-                name: row.get(2)?,
-                is_dir: row.get(3)?,
-                file_type: row.get(4)?,
-                size: row.get(5)?,
-                last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
-                created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
-                accessed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(8)?),
-                is_indexed: row.get(9)?,
-                content_indexed: row.get(10)?,
-                is_indexable: row.get(11)?,
-                is_hidden: row.get(12)?,
-                is_readonly: row.get(13)?,
-                is_system: row.get(14)?,
-                is_executable: row.get(15)?,
-                is_symlink: row.get(16)?,
-                permissions: row.get(17)?,
-                owner: row.get(18)?,
-                group: row.get(19)?,
-                mime_type: row.get(20)?,
-                encoding: row.get(21)?,
-                line_count: row.get(22)?,
-                word_count: row.get(23)?,
-                checksum: row.get(24)?,
-                is_encrypted: row.get(25)?,
-            })
-        })?
-        .collect::<SqliteResult<Vec<_>>>()?;
+        let files: Vec<File> = stmt
+            .query_map([], |row| { Self::map_row_to_file(row) })?
+            .collect::<SqliteResult<Vec<_>>>()?;
         Ok(files)
     }
 }
 
-
 impl Db {
+
+    fn execute_search_query(&self, sql: &str, params: &[Box<dyn rusqlite::ToSql>]) -> AppResult<Vec<File>> {
+        let mut stmt = self.conn.prepare(sql)?;
+
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let result = stmt.query_map(rusqlite::params_from_iter(param_refs), Self::map_row_to_file)?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(result)
+    }
+    fn load_types_cache(&mut self) -> AppResult<()> {
+        let types = self.get_all_types()?;
+        self.types_cache = Some(types.into_iter().collect());
+        Ok(())
+    }
 
     fn file_exist(&mut self, file: &File) -> AppResult<bool> {
         let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM files WHERE path = ? LIMIT 1)")?;
@@ -404,6 +324,11 @@ impl Db {
     }
 
     fn type_exist(&self, type_name: &str) -> AppResult<bool> {
+        if let Some(types_cache) = &self.types_cache {
+            if let Some(_) = types_cache.iter().position(|t| t == type_name) {
+                return Ok(true);
+            }
+        }
         let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM types WHERE name = ? LIMIT 1)")?;
         let exists: i64 = stmt.query_row([type_name], |row| row.get(0))?;
         Ok(exists > 0)
@@ -412,70 +337,100 @@ impl Db {
     fn delete_files_by_path_prefix(&mut self, path_prefix: &str) -> AppResult<()> {
         let tx = self.conn.transaction()?;
 
-        // Supprimer d'abord le contenu FTS des fichiers qui commencent par le préfixe
         tx.execute(
             "DELETE FROM fts_content WHERE file_id IN (SELECT id FROM files WHERE path LIKE ?)",
             [format!("{}%", path_prefix)]
         )?;
 
-        // Puis supprimer les fichiers
         tx.execute("DELETE FROM files WHERE path LIKE ?", [format!("{}%", path_prefix)])?;
 
         tx.commit()?;
         Ok(())
     }
 
-    fn insert_type(&mut self, type_name: Vec<String>) -> AppResult<()> {
-
-        let mut new_types = HashSet::new();
-
-        for type_name in &type_name {
-            if !self.type_exist(type_name).unwrap_or(false) {
-                new_types.insert(type_name.clone());
-            }
+    fn insert_type(&mut self, type_names: Vec<String>) -> AppResult<()> {
+        if self.types_cache.is_none() {
+            self.load_types_cache()?;
         }
+
+        let cache = self.types_cache.as_ref().unwrap();
+
+        let new_types: Vec<String> = type_names.into_iter()
+            .filter(|t| !cache.contains(t))
+            .collect();
 
         if new_types.is_empty() {
             return Ok(());
         }
 
         let tx = self.conn.transaction()?;
+        let mut stmt = tx.prepare("INSERT INTO types (name) VALUES (?)")?;
 
         for type_name in &new_types {
-            tx.execute("INSERT INTO types (name) VALUES (?)", [type_name])?;
+            stmt.execute([type_name])?;
         }
 
+        drop(stmt);
         tx.commit()?;
+
+        if let Some(ref mut cache) = self.types_cache {
+            cache.extend(new_types);
+        }
         Ok(())
     }
 
     fn insert_file(&mut self, files: Vec<File>) -> AppResult<()> {
-        let mut new_files: Vec<File> = Vec::new();
-
-        for file in files {
-            if !self.file_exist(&file).unwrap_or(false) {
-                new_files.push(file);
-            }
+        if files.is_empty() {
+            return Ok(());
         }
+        let tx = self.conn.transaction()?;
+
+        let paths: Vec<String> = files.iter()
+            .map(|f| format!("'{}'", f.path.to_str().unwrap().replace("'", "''")))
+            .collect();
+
+        let existing_paths_query = format!(
+            "SELECT path FROM files WHERE path IN ({})",
+            paths.join(",")
+        );
+
+        let mut existing_paths = HashSet::new();
+        let mut stmt = tx.prepare(&existing_paths_query)?;
+        let rows = stmt.query_map([], |row| {
+            Ok(row.get::<_, String>(0)?)
+        })?;
+
+        for path in rows {
+            existing_paths.insert(path?);
+        }
+        drop(stmt);
+
+        let new_files: Vec<&File> = files.iter()
+            .filter(|f| !existing_paths.contains(f.path.to_str().unwrap()))
+            .collect();
 
         if new_files.is_empty() {
+            tx.commit()?;
             return Ok(());
         }
 
-        let tx = self.conn.transaction()?;
-
-        let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at, accessed_at, is_indexed, content_indexed, is_indexable, is_hidden, is_readonly, is_system, is_executable, is_symlink, permissions, owner, \"group\", mime_type, encoding, line_count, word_count, checksum, is_encrypted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
+        let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at, accessed_at, is_indexed, content_indexed, is_indexable, is_hidden, is_readonly, is_system, is_executable, is_symlink, permissions, owner, `group`, mime_type, encoding, line_count, word_count, checksum, is_encrypted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
 
         for file in &new_files {
+            let path = file.path.to_str().unwrap();
+            let last_modified = file.last_modified.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+            let created_at = file.created_at.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+            let accessed_at = file.accessed_at.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+
             stmt.execute(rusqlite::params![
-                file.path.to_str().unwrap(),
+                path,
                 file.name,
                 file.is_dir,
                 file.file_type,
                 file.size,
-                file.last_modified.duration_since(UNIX_EPOCH).unwrap().as_secs(),
-                file.created_at.duration_since(UNIX_EPOCH).unwrap().as_secs(),
-                file.accessed_at.duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                last_modified,
+                created_at,
+                accessed_at,
                 file.is_indexed,
                 file.content_indexed,
                 file.is_indexable,
@@ -499,5 +454,35 @@ impl Db {
         drop(stmt);
         tx.commit()?;
         Ok(())
+    }
+
+    fn map_row_to_file(row: &rusqlite::Row) -> rusqlite::Result<File> {
+        Ok(File {
+            path: PathBuf::from(row.get::<_, String>(1)?),
+            name: row.get(2)?,
+            is_dir: row.get(3)?,
+            file_type: row.get(4)?,
+            size: row.get(5)?,
+            last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
+            created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
+            accessed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(8)?),
+            is_indexed: row.get(9)?,
+            content_indexed: row.get(10)?,
+            is_indexable: row.get(11)?,
+            is_hidden: row.get(12)?,
+            is_readonly: row.get(13)?,
+            is_system: row.get(14)?,
+            is_executable: row.get(15)?,
+            is_symlink: row.get(16)?,
+            permissions: row.get(17)?,
+            owner: row.get(18)?,
+            group: row.get(19)?,
+            mime_type: row.get(20)?,
+            encoding: row.get(21)?,
+            line_count: row.get(22)?,
+            word_count: row.get(23)?,
+            checksum: row.get(24)?,
+            is_encrypted: row.get(25)?,
+        })
     }
 }
