@@ -364,7 +364,7 @@ impl Db {
         }
 
         let tx = self.conn.transaction()?;
-        let mut stmt = tx.prepare("INSERT INTO types (name) VALUES (?)")?;
+        let mut stmt = tx.prepare("INSERT OR IGNORE INTO types (name) VALUES (?)")?;
 
         for type_name in &new_types {
             stmt.execute([type_name])?;
