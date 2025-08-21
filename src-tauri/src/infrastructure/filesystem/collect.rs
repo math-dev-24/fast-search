@@ -257,10 +257,8 @@ fn should_skip_entry(entry: &walkdir::DirEntry) -> bool {
     should_skip
 }
 
-// Fonctions utilitaires pour l'extraction des métadonnées
 
 fn is_hidden_file(path: &Path) -> bool {
-    // Vérification des attributs cachés selon le système d'exploitation
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::fs::MetadataExt;

@@ -36,7 +36,6 @@ pub fn scan_files_async(window: WebviewWindow, paths: Vec<String>) {
             return;
         }
 
-
         let progress_tracker = Arc::new(Mutex::new(ScanProgressTracker::new(total_paths)));
         let mut all_files: Vec<File> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
