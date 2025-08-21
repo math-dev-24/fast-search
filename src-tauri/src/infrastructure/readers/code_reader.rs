@@ -1,5 +1,6 @@
 use crate::domain::ports::reader::Reader;
 use crate::domain::entities::file::File;
+use crate::shared::errors::{AppError, AppResult};
 use std::fs;
 use std::io::Read;
 use std::path::Path;
@@ -25,36 +26,35 @@ impl CodeReader {
                 !line.starts_with("<!--") &&
                 !line.starts_with("-->")
             })
-            .take(2000) // Limiter à 2000 lignes pour éviter les fichiers trop longs
+            .take(2000)
             .collect::<Vec<_>>()
             .join(" ")
     }
 }
 
 impl Reader for CodeReader {
-    fn read(&self, file: &File) -> Result<String, String> {
+    fn read(&self, file: &File) -> AppResult<String> {
         let file_path = Path::new(&file.path);
         
         if !file_path.exists() || !file_path.is_file() {
-            return Err(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", file));
+            return Err(AppError::NotFound(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", file)));
         }
 
         // Vérifier la taille du fichier (limite à 5MB pour les fichiers de code)
         let metadata = fs::metadata(file_path)
-            .map_err(|e| format!("Erreur lors de la lecture des métadonnées: {}", e))?;
+            .map_err(|e| AppError::NotFound(format!("Erreur lors de la lecture du fichier: {}", e)))?;
         
         if metadata.len() > 5 * 1024 * 1024 {
-            return Err(format!("Fichier trop volumineux: {} bytes", metadata.len()));
+            return Err(AppError::NotFound(format!("Fichier trop volumineux: {} bytes", metadata.len())));
         }
 
         let mut file = fs::File::open(file_path)
-            .map_err(|e| format!("Erreur lors de l'ouverture du fichier: {}", e))?;
+            .map_err(|e| AppError::NotFound(format!("Erreur lors de la lecture du fichier: {}", e)))?;
         
         let mut content = String::new();
         file.read_to_string(&mut content)
-            .map_err(|e| format!("Erreur lors de la lecture du fichier: {}", e))?;
+            .map_err(|e| AppError::NotFound(format!("Erreur lors de la lecture du fichier: {}", e)))?;
 
-        // Nettoyer le contenu en supprimant les commentaires et lignes vides
         let cleaned_content = self.clean_code_content(&content);
         
         Ok(cleaned_content)

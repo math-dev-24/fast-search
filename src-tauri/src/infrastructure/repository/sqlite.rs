@@ -6,6 +6,7 @@ use crate::domain::entities::stat::Stat;
 use crate::domain::entities::search::{SearchQuery, DateMode, SortBy, SortOrder};
 use crate::domain::ports::repository::FileRepository;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use crate::shared::errors::AppResult;
 
 pub struct Db {
     pub conn: Connection,
@@ -13,27 +14,137 @@ pub struct Db {
 
 impl FileRepository for Db {
 
-    fn new(path: &str) -> SqliteResult<Db> {
-        let conn = Connection::open(path).map_err(|e| e.to_string()).expect("Failed to open database");        
+    fn new(path: &str) -> AppResult<Db> {
+        let conn = Connection::open(path)?;
         Ok(Self { conn })
     }
 
-    fn init(&self) -> SqliteResult<(), rusqlite::Error> {
+    fn init(&self) -> AppResult<()> {
         let init_sql = include_str!("../../../data/init.sql");
-        match self.conn.execute_batch(init_sql) {
-            Ok(_) => println!("Base de données initialisée avec succès"),
-            Err(e) => {
-                println!("Erreur d'initialisation de la base: {}", e);
-                return Err(e);
-            }
-        }
+        self.conn.execute_batch(init_sql)?;
+        println!("Database initialized");
         Ok(())
+    }
+
+    fn insert(&mut self, files: Vec<File>) -> AppResult<()> {
+
+        let new_types = files.iter()
+        .map(|file| file.file_type.clone().unwrap_or_default())
+        .collect::<Vec<_>>();
+
+        self.insert_type(new_types)?;
+        self.insert_file(files)?;
+
+        Ok(())
+    }
+
+    fn insert_paths(&mut self, new_paths: Vec<String>) -> AppResult<Vec<String>> {
+
+        let db_paths = self.get_all_paths()?;
+
+        let need_delete_paths: Vec<String> = db_paths.iter().filter(|path| !new_paths.contains(path)).cloned().collect();
+
+        let new_paths: Vec<String> = new_paths.iter().filter(|path| !db_paths.contains(path)).cloned().collect();
+
+        for path in &need_delete_paths {
+            self.delete_files_by_path_prefix(path)?;
+        }
+
+        let tx = self.conn.transaction()?;
+
+        tx.execute("DELETE FROM paths", [])?;
+
+        for path in &new_paths {
+            tx.execute("INSERT INTO paths (path) VALUES (?)", [path])?;
+        }
+
+        tx.commit()?;
+
+        Ok(new_paths)
+    }
+
+    fn get_stat(&self) -> AppResult<Stat> {
+        let mut stmt = self.conn.prepare(
+            "SELECT
+                COUNT(CASE WHEN is_dir = 0 THEN 1 END) as nb_files,
+                COUNT(CASE WHEN is_dir = 1 THEN 1 END) as nb_folders,
+                COALESCE(SUM(CASE WHEN is_dir = 0 THEN size ELSE 0 END), 0) as total_size
+             FROM files"
+        )?;
+
+        let result = stmt.query_row([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?
+            ))
+        })?;
+
+        // Indexation des fichiers
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 1 AND is_indexable = 1")?;
+        let indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
+
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 0 AND is_indexable = 1")?;
+        let unindexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
+
+        let indexed_percentage = (indexed_files as f64 / (indexed_files + unindexed_files) as f64) * 100.0;
+
+        // Indexation du contenu
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexable = 0")?;
+        let unindexable_files: i64 = stmt.query_row([], |row| row.get(0))?;
+
+
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 1 AND is_indexable = 1")?;
+        let content_indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
+
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 0 AND is_indexable = 1")?;
+        let uncontent_indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
+
+        let content_indexed_percentage = (content_indexed_files as f64 / (content_indexed_files + uncontent_indexed_files + unindexable_files) as f64) * 100.0;
+
+        Ok(Stat {
+            nb_files: result.0 as u32,
+            nb_folders: result.1 as u32,
+            total_size: result.2 as u64,
+            indexed_files: indexed_files as u32,
+            unindexed_files: unindexed_files as u32,
+            indexed_percentage: indexed_percentage as f64,
+            content_indexed_files: content_indexed_files as u32,
+            uncontent_indexed_files: uncontent_indexed_files as u32,
+            content_indexed_percentage: content_indexed_percentage as f64,
+            unindexable_files: unindexable_files as u32
+        })
+    }
+
+    fn get_all_types(&self) -> AppResult<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT name FROM types")?;
+        let types: Vec<String> = stmt.query_map([], |row| row.get(0))?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(types)
+    }
+
+    fn get_all_paths(&self) -> AppResult<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT DISTINCT path FROM paths")?;
+        let paths: Vec<String> = stmt.query_map([], |row| {
+            Ok(row.get(0)?)
+        })?
+        .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(paths)
+    }
+
+    fn get_all_folders(&self) -> AppResult<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT DISTINCT name FROM files WHERE is_dir = 1")?;
+        let folders: Vec<String> = stmt.query_map([], |row| {
+            Ok(row.get(0)?)
+        })?
+        .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(folders)
     }
 
     fn search(
         &self,
         query: &SearchQuery,
-    ) -> SqliteResult<Vec<File>> {
+    ) -> AppResult<Vec<File>> {
         let mut conditions: Vec<String> = Vec::new();
         let mut params: Vec<String> = Vec::new();
         let mut extra_conditions: Vec<String> = Vec::new();
@@ -216,129 +327,38 @@ impl FileRepository for Db {
         Ok(result)
     }
 
-    fn get_stat(&self) -> SqliteResult<Stat> {
-        let mut stmt = self.conn.prepare(
-            "SELECT
-                COUNT(CASE WHEN is_dir = 0 THEN 1 END) as nb_files,
-                COUNT(CASE WHEN is_dir = 1 THEN 1 END) as nb_folders,
-                COALESCE(SUM(CASE WHEN is_dir = 0 THEN size ELSE 0 END), 0) as total_size
-             FROM files"
-        )?;
-
-        let result = stmt.query_row([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, i64>(2)?
-            ))
-        })?;
-
-        // Indexation des fichiers
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 1 AND is_indexable = 1")?;
-        let indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
-
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexed = 0 AND is_indexable = 1")?;
-        let unindexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
-
-        let indexed_percentage = (indexed_files as f64 / (indexed_files + unindexed_files) as f64) * 100.0;
-
-        // Indexation du contenu
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE is_indexable = 0")?;
-        let unindexable_files: i64 = stmt.query_row([], |row| row.get(0))?;
-
-
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 1 AND is_indexable = 1")?;
-        let content_indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
-
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM files WHERE content_indexed = 0 AND is_indexable = 1")?;
-        let uncontent_indexed_files: i64 = stmt.query_row([], |row| row.get(0))?;
-
-        let content_indexed_percentage = (content_indexed_files as f64 / (content_indexed_files + uncontent_indexed_files + unindexable_files) as f64) * 100.0;
-
-        Ok(Stat {
-            nb_files: result.0 as u32,
-            nb_folders: result.1 as u32,
-            total_size: result.2 as u64,
-            indexed_files: indexed_files as u32,
-            unindexed_files: unindexed_files as u32,
-            indexed_percentage: indexed_percentage as f64,
-            content_indexed_files: content_indexed_files as u32,
-            uncontent_indexed_files: uncontent_indexed_files as u32,
-            content_indexed_percentage: content_indexed_percentage as f64,
-            unindexable_files: unindexable_files as u32
-        })
-    }
-
-    fn get_all_types(&self) -> SqliteResult<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT name FROM types")?;
-        let types: Vec<String> = stmt.query_map([], |row| row.get(0))?
-            .collect::<SqliteResult<Vec<_>>>()?;
-        Ok(types)
-    }
-
-    fn insert(&mut self, files: Vec<File>) -> SqliteResult<()> {
-
-        let new_types = files.iter()
-        .map(|file| file.file_type.clone().unwrap_or_default())
-        .collect::<Vec<_>>();
-
-        self.insert_type(new_types)?;
-        self.insert_file(files)?;
-
-        Ok(())
-    }
-
-    fn reset_data(&self) -> SqliteResult<()> {
+    fn reset_data(&self) -> AppResult<()> {
         self.conn.execute("DELETE FROM files", [])?;
         self.conn.execute("DELETE FROM types", [])?;
         self.conn.execute("DELETE FROM paths", [])?;
         Ok(())
     }
 
-    fn get_all_folders(&self) -> SqliteResult<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT DISTINCT name FROM files WHERE is_dir = 1")?;
-        let folders: Vec<String> = stmt.query_map([], |row| {
-            Ok(row.get(0)?)
-        })?
-        .collect::<SqliteResult<Vec<_>>>()?;
-        Ok(folders)
-    }
-
-    fn get_all_paths(&self) -> SqliteResult<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT DISTINCT path FROM paths")?;
-        let paths: Vec<String> = stmt.query_map([], |row| {
-            Ok(row.get(0)?)
-        })?
-        .collect::<SqliteResult<Vec<_>>>()?;
-        Ok(paths)
-    }
-
-    fn insert_paths(&mut self, new_paths: Vec<String>) -> SqliteResult<Vec<String>> {
-
-        let db_paths = self.get_all_paths()?;
-
-        let need_delete_paths: Vec<String> = db_paths.iter().filter(|path| !new_paths.contains(path)).cloned().collect();
-
-        let new_paths: Vec<String> = new_paths.iter().filter(|path| !db_paths.contains(path)).cloned().collect();
-
-        for path in &need_delete_paths {
-            self.delete_files_by_path_prefix(path)?;
-        }
+    fn update_file_index_status(&mut self, file: &File, content_hash: String, is_indexable: bool) -> AppResult<()> {
 
         let tx = self.conn.transaction()?;
 
-        tx.execute("DELETE FROM paths", [])?;
+        let file_id: i64 = tx.query_row(
+            "SELECT id FROM files WHERE path = ?",
+            [file.path.to_str().unwrap()],
+            |row| row.get(0)
+        )?;
 
-        for path in &new_paths {
-            tx.execute("INSERT INTO paths (path) VALUES (?)", [path])?;
-        }
+        tx.execute(
+            "INSERT INTO fts_content (content, file_id) VALUES (?, ?)",
+            rusqlite::params![content_hash, file_id]
+        )?;
+
+        tx.execute(
+            "UPDATE files SET content_indexed = ?, is_indexable = ? WHERE path = ?",
+            rusqlite::params![true, is_indexable, file.path.to_str().unwrap()]
+        )?;
 
         tx.commit()?;
-
-        Ok(new_paths)
+        Ok(())
     }
 
-    fn get_uncontent_indexed_files(&self) -> SqliteResult<Vec<File>> {
+    fn get_uncontent_indexed_files(&self) -> AppResult<Vec<File>> {
         let mut stmt = self.conn.prepare("SELECT * FROM files WHERE content_indexed = 0 AND is_indexable = 1")?;
         let files: Vec<File> = stmt.query_map([], |row| {
             Ok(File {
@@ -372,64 +392,40 @@ impl FileRepository for Db {
         .collect::<SqliteResult<Vec<_>>>()?;
         Ok(files)
     }
-
-    fn update_file_index_status(&mut self, file: &File, content_hash: String, is_indexable: bool) -> SqliteResult<()> {
-
-        let tx = self.conn.transaction()?;
-
-        let file_id: i64 = tx.query_row(
-            "SELECT id FROM files WHERE path = ?",
-            [file.path.to_str().unwrap()],
-            |row| row.get(0)
-        )?;
-
-        tx.execute(
-            "INSERT INTO fts_content (content, file_id) VALUES (?, ?)",
-            rusqlite::params![content_hash, file_id]
-        )?;
-
-        tx.execute(
-            "UPDATE files SET content_indexed = ?, is_indexable = ? WHERE path = ?",
-            rusqlite::params![true, is_indexable, file.path.to_str().unwrap()]
-        )?;
-
-        tx.commit()?;
-        Ok(())
-    }
 }
 
 
 impl Db {
 
-    fn file_exist(&mut self, file: &File) -> SqliteResult<bool> {
+    fn file_exist(&mut self, file: &File) -> AppResult<bool> {
         let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM files WHERE path = ? LIMIT 1)")?;
         let exists: i64 = stmt.query_row([file.path.to_str().unwrap()], |row| row.get(0))?;
         Ok(exists > 0)
     }
 
-    fn type_exist(&self, type_name: &str) -> SqliteResult<bool> {
+    fn type_exist(&self, type_name: &str) -> AppResult<bool> {
         let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM types WHERE name = ? LIMIT 1)")?;
         let exists: i64 = stmt.query_row([type_name], |row| row.get(0))?;
         Ok(exists > 0)
     }
 
-    fn delete_files_by_path_prefix(&mut self, path_prefix: &str) -> SqliteResult<()> {
+    fn delete_files_by_path_prefix(&mut self, path_prefix: &str) -> AppResult<()> {
         let tx = self.conn.transaction()?;
-        
+
         // Supprimer d'abord le contenu FTS des fichiers qui commencent par le préfixe
         tx.execute(
             "DELETE FROM fts_content WHERE file_id IN (SELECT id FROM files WHERE path LIKE ?)",
             [format!("{}%", path_prefix)]
         )?;
-        
+
         // Puis supprimer les fichiers
         tx.execute("DELETE FROM files WHERE path LIKE ?", [format!("{}%", path_prefix)])?;
-        
+
         tx.commit()?;
         Ok(())
     }
 
-    fn insert_type(&mut self, type_name: Vec<String>) -> SqliteResult<()> {      
+    fn insert_type(&mut self, type_name: Vec<String>) -> AppResult<()> {
 
         let mut new_types = HashSet::new();
 
@@ -452,32 +448,32 @@ impl Db {
         tx.commit()?;
         Ok(())
     }
-    
-    fn insert_file(&mut self, files: Vec<File>) -> SqliteResult<()> {
+
+    fn insert_file(&mut self, files: Vec<File>) -> AppResult<()> {
         let mut new_files: Vec<File> = Vec::new();
-        
+
         for file in files {
             if !self.file_exist(&file).unwrap_or(false) {
                 new_files.push(file);
             }
         }
-        
+
         if new_files.is_empty() {
             return Ok(());
         }
 
         let tx = self.conn.transaction()?;
-        
+
         let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at, accessed_at, is_indexed, content_indexed, is_indexable, is_hidden, is_readonly, is_system, is_executable, is_symlink, permissions, owner, \"group\", mime_type, encoding, line_count, word_count, checksum, is_encrypted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
 
         for file in &new_files {
             stmt.execute(rusqlite::params![
-                file.path.to_str().unwrap(), 
-                file.name, 
-                file.is_dir, 
-                file.file_type, 
-                file.size, 
-                file.last_modified.duration_since(UNIX_EPOCH).unwrap().as_secs(), 
+                file.path.to_str().unwrap(),
+                file.name,
+                file.is_dir,
+                file.file_type,
+                file.size,
+                file.last_modified.duration_since(UNIX_EPOCH).unwrap().as_secs(),
                 file.created_at.duration_since(UNIX_EPOCH).unwrap().as_secs(),
                 file.accessed_at.duration_since(UNIX_EPOCH).unwrap().as_secs(),
                 file.is_indexed,

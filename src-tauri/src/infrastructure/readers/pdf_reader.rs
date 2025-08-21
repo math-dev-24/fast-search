@@ -1,5 +1,6 @@
 use crate::domain::ports::reader::Reader;
 use crate::domain::entities::file::File;
+use crate::shared::errors::{AppError, AppResult};
 use std::fs;
 use std::path::Path;
 use lopdf::Document;
@@ -11,9 +12,9 @@ impl PdfReader {
         Self
     }
 
-    fn extract_text_from_pdf(&self, file: &File) -> Result<String, String> {
+    fn extract_text_from_pdf(&self, file: &File) -> AppResult<String> {
         let doc = Document::load(&file.path)
-            .map_err(|e| format!("Erreur lors du chargement du document PDF: {}", e))?;
+            .map_err(|e| AppError::Internal(format!("Erreur lors du chargement du document PDF: {}", e)))?;
         
         let mut text_content = String::new();
         
@@ -44,19 +45,19 @@ impl PdfReader {
 }
 
 impl Reader for PdfReader {
-    fn read(&self, file: &File) -> Result<String, String> {
+    fn read(&self, file: &File) -> AppResult<String> {
         let file_path = Path::new(&file.path);
         
         if !file_path.exists() || !file_path.is_file() {
-            return Err(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", file));
+            return Err(AppError::NotFound(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", file)));
         }
 
         // Vérifier la taille du fichier (limite à 50MB pour les fichiers PDF)
         let metadata = fs::metadata(file_path)
-            .map_err(|e| format!("Erreur lors de la lecture des métadonnées: {}", e))?;
+            .map_err(|e| AppError::FileSystem(e))?;
         
         if metadata.len() > 50 * 1024 * 1024 {
-            return Err(format!("Fichier PDF trop volumineux: {} bytes", metadata.len()));
+            return Err(AppError::Validation(format!("Fichier PDF trop volumineux: {} bytes", metadata.len())));
         }
 
         // Extraire le texte du PDF

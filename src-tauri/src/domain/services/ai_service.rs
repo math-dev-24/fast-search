@@ -2,6 +2,7 @@ use std::sync::Arc;
 use crate::domain::entities::ai::{AiError, AiRequest};
 use crate::domain::entities::search::SearchQuery;
 use crate::domain::ports::ai::Ai;
+use crate::shared::errors::AppResult;
 
 pub struct AiService {
     ai_port: Arc<dyn Ai>,
@@ -13,7 +14,7 @@ impl AiService {
         Self { ai_port }
     }
 
-    pub async fn generate(&self, prompt: &str) -> Result<SearchQuery, AiError> {
+    pub async fn generate(&self, prompt: &str) -> AppResult<SearchQuery> {
         let request = AiRequest {
             prompt: prompt.to_string(),
             model: None,
@@ -47,15 +48,15 @@ impl AiService {
         Ok(search_query)
     }
 
-    pub async fn list_models(&self) -> Result<Vec<String>, AiError> {
+    pub async fn list_models(&self) -> AppResult<Vec<String>> {
         self.ai_port.list_models().await
     }
 
-    pub async fn health_check(&self) -> Result<bool, AiError> {
+    pub async fn health_check(&self) -> AppResult<bool> {
         self.ai_port.health_check().await
     }
 
-    pub async fn model_is_available(&self, model: &str) -> Result<bool, AiError> {
+    pub async fn model_is_available(&self, model: &str) -> AppResult<bool> {
         let available_models = match self.ai_port.list_models().await {
             Ok(models) => models,
             Err(e) => return Err(e)

@@ -1,5 +1,6 @@
 use crate::domain::entities::file::File;
+use crate::shared::errors::AppResult;
 
 pub trait Reader {
-    fn read(&self, file: &File) -> Result<String, String>;
+    fn read(&self, file: &File) -> AppResult<String>;
 }

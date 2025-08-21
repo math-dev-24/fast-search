@@ -6,6 +6,8 @@ mod shared;
 
 use commands::*;
 use crate::application::factories::service_factory::get_service_repository;
+use crate::infrastructure::filesystem::global_watcher_manager::initialize_global_watcher_from_db;
+use tauri::Manager;
 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -35,11 +37,30 @@ pub fn run() {
         file_commands::get_all_folders,
         file_commands::get_all_paths,
 
+        // File Watcher
+        watcher_commands::start_file_watcher,
+        watcher_commands::stop_file_watcher,
+        watcher_commands::is_file_watcher_active,
+        watcher_commands::get_watched_paths,
+        watcher_commands::get_active_watchers,
+        watcher_commands::stop_all_watchers,
+        
+        // Global File Watcher
+        watcher_commands::get_default_watcher_status,
+        watcher_commands::restart_default_watcher,
+        watcher_commands::stop_default_watcher,
+
         //AI
         ai_commands::ai_search,
         ai_commands::ai_health_check,
         ai_commands::ai_list_models
     ])
+    .setup(|app| {
+        let window = app.get_webview_window("main").unwrap();
+        // Async initialization - non-blocking
+        initialize_global_watcher_from_db(window);
+        Ok(())
+    })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

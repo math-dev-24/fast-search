@@ -1,5 +1,6 @@
 use crate::domain::entities::file::File;
 use crate::domain::services::reader_service::ReaderService;
+use crate::shared::errors::{AppError, AppResult};
 
 pub struct ContentIndexerService {
     reader_service: ReaderService,
@@ -14,9 +15,9 @@ impl ContentIndexerService {
         }
     }
 
-    pub fn index_file_content(&mut self, file: &File) -> Result<String, String> {
+    pub fn index_file_content(&mut self, file: &File) -> AppResult<String> {
         if !ReaderService::can_read_file(&file) {
-            return Err(format!("Type de fichier non supporté: {}", file));
+            return Err(AppError::NotFound("Impossible de lire le fichier".to_string()));
         }
 
         self.reader_service.read(file)

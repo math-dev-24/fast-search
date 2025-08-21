@@ -3,6 +3,7 @@ use crate::domain::entities::ai::{AiRequest, AiResponse, AiError};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Serialize, Deserialize};
+use crate::shared::errors::{AppError, AppResult};
 
 #[derive(Debug, Serialize)]
 struct LMStudioRequest {
@@ -13,14 +14,12 @@ struct LMStudioRequest {
     stream: bool,
 }
 
-// Support flexible content formats in responses, but still serialize simple String for requests
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct LMStudioMessage {
     role: String,
     content: LMStudioContent,
 }
 
-// Content can be a plain string or an array of parts (some providers return parts)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(untagged)]
 enum LMStudioContent {
@@ -155,7 +154,7 @@ impl LmStudio {
 
 #[async_trait]
 impl Ai for LmStudio {
-    async fn generate(&self, request: AiRequest) -> Result<AiResponse, AiError> {
+    async fn generate(&self, request: AiRequest) -> AppResult<AiResponse> {
         let lm_studio_request = self.build_request(request);
 
         let response = self
@@ -179,7 +178,8 @@ impl Ai for LmStudio {
             })?;
 
         if !response.status().is_success() {
-            return Err(self.handle_error_response(response).await);
+            let error = self.handle_error_response(response).await;
+            return Err(AppError::Ai(error));
         }
 
         let body_text = response
@@ -207,7 +207,7 @@ impl Ai for LmStudio {
         })
     }
 
-    async fn list_models(&self) -> Result<Vec<String>, AiError> {
+    async fn list_models(&self) -> AppResult<Vec<String>> {
         let response = self
             .client
             .get(format!("{}/v1/models", self.base_url))
@@ -216,7 +216,8 @@ impl Ai for LmStudio {
             .map_err(|e| AiError::ConnectionError(format!("Failed to list models: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(self.handle_error_response(response).await);
+            let error = self.handle_error_response(response).await;
+            return Err(AppError::Ai(error));
         }
         
         let response_body = response
@@ -229,7 +230,7 @@ impl Ai for LmStudio {
         Ok(models)
     }
 
-    async fn health_check(&self) -> Result<bool, AiError> {
+    async fn health_check(&self) -> AppResult<bool> {
         match self.list_models().await {
             Ok(_) => Ok(true),
             Err(e) => Err(e)

@@ -2,6 +2,7 @@ use crate::domain::ports::reader::Reader;
 use crate::infrastructure::readers::{TextReader, CodeReader, CsvReader, PdfReader, WordReader};
 use crate::domain::entities::file::File;
 use std::path::Path;
+use crate::shared::errors::AppResult;
 
 pub struct ReaderService {
     reader: Box<dyn Reader>,
@@ -14,10 +15,8 @@ impl ReaderService {
         }
     }
 
-    pub fn read(&mut self, file: &File) -> Result<String, String> {
-        // Sélectionner le reader approprié basé sur l'extension du fichier
+    pub fn read(&mut self, file: &File) -> AppResult<String> {
         self.reader = Self::get_reader_for_file(&file);
-        
         self.reader.read(&file)
     }
 

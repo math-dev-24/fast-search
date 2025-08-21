@@ -1,5 +1,6 @@
 use crate::domain::ports::reader::Reader;
 use crate::domain::entities::file::File;
+use crate::shared::errors::{AppError, AppResult};
 use std::fs;
 use std::path::Path;
 
@@ -10,24 +11,24 @@ impl WordReader {
         Self
     }
 
-    fn extract_text_from_docx(&self, _file: &File) -> Result<String, String> {
-        Err("Lecture des fichiers Word non encore implémentée".to_string())
+    fn extract_text_from_docx(&self, _file: &File) -> AppResult<String> {
+        Err(AppError::Internal("Lecture des fichiers Word non encore implémentée".to_string()))
     }
 }
 
 impl Reader for WordReader {
-    fn read(&self, file: &File) -> Result<String, String> {
+    fn read(&self, file: &File) -> AppResult<String> {
         let file_path = Path::new(&file.path);
         
         if !file_path.exists() || !file_path.is_file() {
-            return Err(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", file));
+            return Err(AppError::NotFound(format!("Le fichier n'existe pas ou n'est pas un fichier: {}", file)));
         }
 
         let metadata = fs::metadata(file_path)
-            .map_err(|e| format!("Erreur lors de la lecture des métadonnées: {}", e))?;
+            .map_err(|e| AppError::FileSystem(e))?;
         
         if metadata.len() > 20 * 1024 * 1024 {
-            return Err(format!("Fichier Word trop volumineux: {} bytes", metadata.len()));
+            return Err(AppError::Validation(format!("Fichier Word trop volumineux: {} bytes", metadata.len())));
         }
 
         // Extraire le texte du document Word

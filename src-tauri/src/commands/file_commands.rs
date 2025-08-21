@@ -3,6 +3,7 @@ use crate::domain::entities::search::SearchQuery;
 use crate::infrastructure::filesystem::open_file::open_file_in_explorer;
 use crate::application::factories::service_factory::get_service_repository;
 use crate::infrastructure::filesystem::scanner::scan_files_async;
+use crate::infrastructure::filesystem::global_watcher_manager::update_global_watcher_paths;
 
 #[tauri::command]
 pub fn open_file(path: String) -> Result<(), String> {
@@ -49,7 +50,12 @@ pub fn reset_data() -> Result<(), String> {
 #[tauri::command]
 pub fn save_paths(paths: Vec<String>, window: tauri::WebviewWindow) -> Result<(), String> {
     let mut service_repository = get_service_repository()?;
-    let new_paths = service_repository.insert_paths(paths).expect("Failed to insert paths");
+    let new_paths = service_repository.insert_paths(paths.clone()).expect("Failed to insert paths");
+    
+    // Update global watcher with all configured paths (async, non-blocking)
+    update_global_watcher_paths(paths);
+    
+    // Scan new paths if any
     if !new_paths.is_empty() {
         scan_files_async(window, new_paths);
     }
