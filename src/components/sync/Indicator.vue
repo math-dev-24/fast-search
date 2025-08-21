@@ -23,7 +23,6 @@ const getStatusIcon = (hasError: boolean, hasSuccess: boolean, inSync: boolean) 
 
 <template>
   <div v-if="inSync || hasError || hasSuccess" class="sync-indicator">
-    <!-- Barre de progression globale -->
     <NProgress 
       type="line" 
       :percentage="overallProgress" 
@@ -34,7 +33,7 @@ const getStatusIcon = (hasError: boolean, hasSuccess: boolean, inSync: boolean) 
     />
     
     <!-- Message d'état visible -->
-    <div class="px-8 py-2 text-sm bg-gray-800 border-b">
+    <div class="px-8 py-2 text-sm">
       <NFlex align="center" justify="space-between">
         <NFlex align="center" class="flex-1">
           <NIcon size="14" class="mr-2">
