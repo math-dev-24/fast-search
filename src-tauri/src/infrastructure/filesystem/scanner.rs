@@ -88,7 +88,6 @@ pub fn scan_files_async(window: WebviewWindow, paths: Vec<String>) {
 
             all_files.extend(files_for_path);
 
-            // Mise à jour du tracker
             {
                 let mut tracker = progress_tracker.lock().unwrap();
                 tracker.next_path();

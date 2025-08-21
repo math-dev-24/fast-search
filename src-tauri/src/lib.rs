@@ -6,20 +6,23 @@ mod shared;
 
 use commands::*;
 use crate::application::factories::service_factory::get_service_repository;
-use crate::infrastructure::filesystem::global_watcher_manager::initialize_global_watcher_from_db;
+use crate::infrastructure::watcher::init_watcher::start_file_watcher_on_startup;
+use crate::shared::config::AppState;
 use tauri::Manager;
-
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let service_repository = get_service_repository().expect("Failed to initialize service repository");
+
     service_repository.init().expect("Failed to initialize database");
 
     let builder = tauri::Builder::default();
     let builder = builder.plugin(tauri_plugin_opener::init());
     let builder = builder.plugin(tauri_plugin_dialog::init());
     
-    builder.invoke_handler(tauri::generate_handler![
+    builder
+        .manage(AppState::new())
+        .invoke_handler(tauri::generate_handler![
         // System
         system_commands::get_stat,
         system_commands::diagnose_scan_issues,
@@ -27,6 +30,12 @@ pub fn run() {
         // Indexing
         indexing_commands::sync_files_and_folders,
         indexing_commands::start_content_indexing,
+
+        // Watcher
+        watch_commands::start_file_watcher,
+        watch_commands::stop_file_watcher,
+        watch_commands::restart_file_watcher,
+        watch_commands::get_file_watcher_status,
 
         // File
         file_commands::save_paths,
@@ -44,8 +53,7 @@ pub fn run() {
     ])
     .setup(|app| {
         let window = app.get_webview_window("main").unwrap();
-        // Async initialization - non-blocking
-        initialize_global_watcher_from_db(window);
+        start_file_watcher_on_startup(app, window);
         Ok(())
     })
     .run(tauri::generate_context!())

@@ -395,7 +395,6 @@ fn is_text_file(path: &Path) -> bool {
 }
 
 fn extract_text_stats(path: &Path) -> (Option<u32>, Option<u32>) {
-    // Limiter la taille pour éviter de lire des fichiers trop gros
     if let Ok(metadata) = fs::metadata(path) {
         if metadata.len() > 10 * 1024 * 1024 { // 10MB max
             return (None, None);
@@ -412,8 +411,6 @@ fn extract_text_stats(path: &Path) -> (Option<u32>, Option<u32>) {
                 if let Ok(line) = line {
                     line_count += 1;
                     word_count += line.split_whitespace().count() as u32;
-
-                    // Limiter le traitement pour éviter les performances
                     if line_count > 100_000 {
                         break;
                     }

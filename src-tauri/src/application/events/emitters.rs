@@ -14,6 +14,14 @@ pub const EVENT_INDEX_PROGRESS: &str = "index_content_progress";
 pub const EVENT_INDEX_FINISHED: &str = "index_content_finished";
 pub const EVENT_INDEX_ERROR: &str = "index_content_error";
 
+// Event watchers
+pub const EVENT_WATCHER_STARTED: &str = "watcher_started";
+pub const EVENT_WATCHER_STOPPED: &str = "watcher_stopped";
+pub const EVENT_WATCHER_ERROR: &str = "watcher_error";
+pub const EVENT_FILE_CREATED: &str = "file_created";
+pub const EVENT_FILE_MODIFIED: &str = "file_modified";
+pub const EVENT_FILE_DELETED: &str = "file_deleted";
+
 // Constantes pour les événements généraux
 pub const EVENT_STAT_UPDATED: &str = "stat_updated";
 
