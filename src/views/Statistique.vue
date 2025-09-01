@@ -48,8 +48,14 @@ const getStat = async () => {
     try {
         const tmp_stat = await invoke<Stat>('get_stat');
         stat.value = tmp_stat;
+        if (message) {
+            message.success('Statistiques actualisées avec succès');
+        }
     } catch (error) {
         stat.value = defaultStat;
+        if (message) {
+            message.error('Erreur lors de la récupération des statistiques');
+        }
         console.error(error);
     } finally {
         inLoading.value = false;
@@ -58,12 +64,20 @@ const getStat = async () => {
 
 const resetData = async () => {
     try {
+        if (message) {
+            message.info('Réinitialisation des données en cours...');
+        }
         await invoke('reset_data');
+        if (message) {
+            message.success('Données réinitialisées avec succès');
+        }
         setTimeout(() => {
             getStat();
         }, 500);
     } catch (error) {
-        message.error('Erreur lors de la réinitialisation des données');
+        if (message) {
+            message.error('Erreur lors de la réinitialisation des données');
+        }
         console.error(error);
     }
 }

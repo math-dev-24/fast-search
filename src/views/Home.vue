@@ -131,6 +131,7 @@ import type {File, SearchQuery} from '../types';
 import Search from "../components/Search/Search.vue";
 
 const searchStore = useSearchStore();
+const message = useMessage();
 const modeSearch = ref<string>('search');
 
 const detailFile = ref(null as null | File);
@@ -151,10 +152,15 @@ function handlePreviewFile(file: File) {
   showDetail.value = true;
 }
 
-function handleOpenFile(path: string) {
-  const message = useMessage();
-  message.success('Le dossier va être ouvert (cela peu prendre quelque secondes)');
-  searchStore.openFile(path);
+async function handleOpenFile(path: string) {
+  try {
+    message.info('Le dossier va être ouvert (cela peut prendre quelques secondes)');
+    await searchStore.openFile(path);
+    message.success('Fichier ouvert avec succès');
+  } catch (error) {
+    console.error('Erreur lors de l\'ouverture du fichier:', error);
+    message.error('Erreur lors de l\'ouverture du fichier');
+  }
 }
 
 async function handleSearchWithAi(query: SearchQuery) {
