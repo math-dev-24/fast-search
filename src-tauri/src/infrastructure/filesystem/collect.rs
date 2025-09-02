@@ -6,7 +6,6 @@ use rayon::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::fs;
-use std::io::{BufRead, BufReader};
 use std::collections::HashMap;
 
 const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024;
@@ -124,24 +123,17 @@ fn process_entry_safe(entry: &walkdir::DirEntry) -> Option<File> {
     };
     #[cfg(not(unix))]
     let is_executable = false;
-
     let is_symlink = path.is_symlink();
-
-    // Extraction des informations de propriétaire (Unix/Linux)
     let (owner, group) = (None, None);
 
     // Détermination du type MIME
     let mime_type = determine_mime_type(path);
 
-    // Encodage (pour les fichiers texte)
-    let encoding = if is_text_file(path) { Some("UTF-8".to_string()) } else { None };
+    // Encodage sera déterminé lors de l'indexation du contenu
+    let encoding = None;
 
-    // Comptage des lignes et mots (pour les fichiers texte)
-    let (line_count, word_count) = if is_text_file(path) {
-        extract_text_stats(path)
-    } else {
-        (None, None)
-    };
+    // Pas de comptage des lignes et mots pendant la collecte - sera fait lors de l'indexation du contenu
+    let (line_count, word_count) = (None, None);
 
     if path.is_dir() {
         Some(File {
@@ -154,7 +146,7 @@ fn process_entry_safe(entry: &walkdir::DirEntry) -> Option<File> {
             created_at,
             accessed_at,
             is_indexed: true,
-            content_indexed: true,
+            content_indexed: false,
             is_indexable: true,
             is_hidden,
             is_readonly,
@@ -371,52 +363,3 @@ fn determine_mime_type(path: &Path) -> Option<String> {
     extension.and_then(|ext| mime_map.get(ext.as_str()).map(|&mime| mime.to_string()))
 }
 
-fn is_text_file(path: &Path) -> bool {
-    let mime_type = determine_mime_type(path);
-    mime_type.map(|mime| mime.starts_with("text/") ||
-        mime.contains("json") ||
-        mime.contains("xml") ||
-        mime.contains("javascript") ||
-        mime.contains("markdown") ||
-        mime.contains("csv") ||
-        mime.contains("rust") ||
-        mime.contains("python") ||
-        mime.contains("java") ||
-        mime.contains("c++") ||
-        mime.contains("c") ||
-        mime.contains("go") ||
-        mime.contains("php") ||
-        mime.contains("ruby") ||
-        mime.contains("swift") ||
-        mime.contains("kotlin"))
-        .unwrap_or(false)
-}
-
-fn extract_text_stats(path: &Path) -> (Option<u32>, Option<u32>) {
-    if let Ok(metadata) = fs::metadata(path) {
-        if metadata.len() > 10 * 1024 * 1024 { // 10MB max
-            return (None, None);
-        }
-    }
-
-    match fs::File::open(path) {
-        Ok(file) => {
-            let reader = BufReader::new(file);
-            let mut line_count = 0u32;
-            let mut word_count = 0u32;
-
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    line_count += 1;
-                    word_count += line.split_whitespace().count() as u32;
-                    if line_count > 100_000 {
-                        break;
-                    }
-                }
-            }
-
-            (Some(line_count), Some(word_count))
-        }
-        Err(_) => (None, None)
-    }
-}

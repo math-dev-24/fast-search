@@ -10,12 +10,124 @@ use crate::domain::entities::file::File;
 use crate::domain::entities::scan::{ScanProgress, ScanCollected, InsertProgress, ScanFinished};
 use crate::domain::entities::progress::ScanProgressTracker;
 use crate::infrastructure::filesystem::collect::collect_files_and_folders;
+use crate::application::use_cases::index_content::index_content_async;
 
 const CHUNK_SIZE: usize = 500;
 
+struct ScanContext {
+    service_repository: Arc<Mutex<crate::domain::services::file_service::FileService<crate::infrastructure::repository::sqlite::Db>>>,
+    window: WebviewWindow,
+    progress_tracker: Arc<Mutex<ScanProgressTracker>>,
+}
+
+impl ScanContext {
+    fn emit_stat_update(&self) {
+        if let Ok(repo) = self.service_repository.lock() {
+            if let Ok(stat) = repo.get_stat() {
+                emit_event(&self.window, EVENT_STAT_UPDATED, stat);
+            }
+        }
+    }
+
+    fn emit_scan_error(&self, message: String) {
+        emit_error_event(&self.window, EVENT_SCAN_ERROR, message);
+    }
+}
+
+fn collect_all_files(paths: &[String], context: &ScanContext) -> Result<Vec<File>, Vec<String>> {
+    let mut all_files = Vec::new();
+    let mut errors = Vec::new();
+
+    for (path_index, path) in paths.iter().enumerate() {
+        let path_obj = Path::new(path);
+
+        if !path_obj.exists() {
+            let error_msg = format!("Chemin inexistant: {}", path);
+            errors.push(error_msg.clone());
+            context.emit_scan_error(error_msg);
+            continue;
+        }
+
+        let window_clone = context.window.clone();
+        let progress_tracker_clone = context.progress_tracker.clone();
+
+        let files_for_path = collect_files_and_folders(path_obj, move |current, message| {
+            let mut tracker = progress_tracker_clone.lock().unwrap();
+            tracker.current_path_index = path_index;
+
+            if tracker.is_timeout() {
+                return;
+            }
+
+            let path_progress = current as f64 / 1000.0;
+            let overall_progress = tracker.update_path_progress(path_progress);
+
+            if tracker.should_update_progress() {
+                emit_event(&window_clone, EVENT_SCAN_PROGRESS, ScanProgress {
+                    progress: overall_progress,
+                    message: message.to_string(),
+                    current_path: path.clone(),
+                });
+                tracker.update_progress_time();
+            }
+        });
+
+        all_files.extend(files_for_path);
+
+        {
+            let mut tracker = context.progress_tracker.lock().unwrap();
+            tracker.next_path();
+            tracker.set_total_files(all_files.len());
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(all_files)
+    } else {
+        Err(errors)
+    }
+}
+
+fn insert_files_in_chunks(files: &[File], context: &ScanContext) -> Result<usize, String> {
+    let total_files = files.len();
+    let total_chunks = (total_files + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    let mut insert_errors = 0;
+
+    for (chunk_index, file_chunk) in files.chunks(CHUNK_SIZE).enumerate() {
+        let insert_result = {
+            let mut repo = context.service_repository.lock().unwrap();
+            repo.insert(file_chunk.to_vec())
+        };
+
+        if let Err(e) = insert_result {
+            insert_errors += 1;
+            println!("[WARNING] Chunk insertion error {}: {}", chunk_index, e);
+
+            if insert_errors > 5 {
+                let error_msg = "Too many insertion errors, scan stopped";
+                context.emit_scan_error(error_msg.to_string());
+                return Err(error_msg.to_string());
+            }
+        }
+
+        let progress = (chunk_index + 1) as f64 / total_chunks as f64;
+        let processed = (chunk_index + 1) * CHUNK_SIZE.min(total_files - chunk_index * CHUNK_SIZE);
+
+        emit_event(&context.window, EVENT_SCAN_INSERT_PROGRESS, InsertProgress {
+            progress,
+            processed,
+            total: total_files,
+        });
+
+        println!("[DEBUG] Émission des stats après insertion chunk {}", chunk_index + 1);
+        context.emit_stat_update();
+    }
+
+    Ok(total_files - (insert_errors * CHUNK_SIZE))
+}
+
 pub fn scan_files_async(window: WebviewWindow, paths: Vec<String>) {
     tauri::async_runtime::spawn(async move {
-
         let service_repository = match get_service_repository() {
             Ok(repo) => Arc::new(Mutex::new(repo)),
             Err(e) => {
@@ -24,11 +136,7 @@ pub fn scan_files_async(window: WebviewWindow, paths: Vec<String>) {
             }
         };
 
-        emit_started_event(&window, EVENT_SCAN_STARTED);
-
-        let total_paths = paths.len();
-
-        if total_paths == 0 {
+        if paths.is_empty() {
             emit_finished_event(&window, EVENT_SCAN_FINISHED, ScanFinished {
                 total: 0,
                 message: "Aucun chemin à scanner".to_string(),
@@ -36,63 +144,24 @@ pub fn scan_files_async(window: WebviewWindow, paths: Vec<String>) {
             return;
         }
 
-        let progress_tracker = Arc::new(Mutex::new(ScanProgressTracker::new(total_paths)));
-        let mut all_files: Vec<File> = Vec::new();
-        let mut errors: Vec<String> = Vec::new();
+        let progress_tracker = Arc::new(Mutex::new(ScanProgressTracker::new(paths.len())));
+        let context = ScanContext {
+            service_repository,
+            window: window.clone(),
+            progress_tracker,
+        };
 
-        // Phase 1: Collecte des fichiers avec gestion d'erreur améliorée
-        for (path_index, path) in paths.iter().enumerate() {
-            let path_obj = Path::new(path);
+        emit_started_event(&window, EVENT_SCAN_STARTED);
 
-            if !path_obj.exists() {
-                let error_msg = format!("Chemin inexistant: {}", path);
-                errors.push(error_msg.clone());
-                emit_error_event(&window, EVENT_SCAN_ERROR, error_msg);
-                continue;
+        // Phase 1: Collecte des fichiers
+        let all_files = match collect_all_files(&paths, &context) {
+            Ok(files) => files,
+            Err(errors) => {
+                let message = format!("Erreurs lors de la collecte: {}", errors.join(", "));
+                emit_finished_event(&window, EVENT_SCAN_FINISHED, ScanFinished { total: 0, message });
+                return;
             }
-
-            let window_clone = window.clone();
-            let progress_tracker_clone = progress_tracker.clone();
-
-            {
-                let tracker = progress_tracker_clone.lock().unwrap();
-                if tracker.is_timeout() {
-                    let error_msg = format!("Timeout lors du traitement du chemin: {}", path);
-                    errors.push(error_msg.clone());
-                    emit_error_event(&window, EVENT_SCAN_ERROR, error_msg);
-                    continue;
-                }
-            }
-
-            let files_for_path = collect_files_and_folders(path_obj, move |current, message| {
-                let mut tracker = progress_tracker_clone.lock().unwrap();
-                tracker.current_path_index = path_index;
-
-                if tracker.is_timeout() {
-                    return;
-                }
-
-                let path_progress = current as f64 / 1000.0;
-                let overall_progress = tracker.update_path_progress(path_progress);
-
-                if tracker.should_update_progress() {
-                    emit_event(&window_clone, EVENT_SCAN_PROGRESS, ScanProgress {
-                        progress: overall_progress,
-                        message: message.to_string(),
-                        current_path: path.clone(),
-                    });
-                    tracker.update_progress_time();
-                }
-            });
-
-            all_files.extend(files_for_path);
-
-            {
-                let mut tracker = progress_tracker.lock().unwrap();
-                tracker.next_path();
-                tracker.set_total_files(all_files.len());
-            }
-        }
+        };
 
         let total_files = all_files.len();
 
@@ -103,76 +172,35 @@ pub fn scan_files_async(window: WebviewWindow, paths: Vec<String>) {
         });
 
         if total_files == 0 {
-            let message = if errors.is_empty() {
-                "Aucun fichier trouvé".to_string()
-            } else {
-                format!("Aucun fichier trouvé. Erreurs: {}", errors.join(", "))
-            };
-
             emit_finished_event(&window, EVENT_SCAN_FINISHED, ScanFinished {
                 total: 0,
-                message,
+                message: "Aucun fichier trouvé".to_string(),
             });
             return;
         }
 
-        let total_chunks = (total_files + CHUNK_SIZE - 1) / CHUNK_SIZE;
-
-        let mut insert_errors = 0;
-
-        for (chunk_index, file_chunk) in all_files.chunks(CHUNK_SIZE).enumerate() {
-            let insert_result = {
-                let mut repo = service_repository.lock().unwrap();
-                repo.insert(file_chunk.to_vec())
-            };
-
-            if let Err(e) = insert_result {
-                insert_errors += 1;
-
-                println!("[WARNING] Chunk insertion error {}: {}", chunk_index, e);
-
-                if insert_errors > 5 {
-                    emit_error_event(&window, EVENT_SCAN_ERROR, "Too many insertion errors, scan stopped");
-                    println!("[ERROR] Too many insertion errors, scan stopped");
-                    return;
-                }
+        // Phase 2: Insertion des fichiers en base
+        let success_count = match insert_files_in_chunks(&all_files, &context) {
+            Ok(count) => count,
+            Err(e) => {
+                emit_finished_event(&window, EVENT_SCAN_FINISHED, ScanFinished {
+                    total: 0,
+                    message: format!("Erreur lors de l'insertion: {}", e),
+                });
+                return;
             }
-
-            let progress = (chunk_index + 1) as f64 / total_chunks as f64;
-            let processed = (chunk_index + 1) * CHUNK_SIZE.min(total_files - chunk_index * CHUNK_SIZE);
-
-            emit_event(&window, EVENT_SCAN_INSERT_PROGRESS, InsertProgress {
-                progress,
-                processed,
-                total: total_files,
-            });
-
-            {
-                let repo = service_repository.lock().unwrap();
-                if let Ok(stat) = repo.get_stat() {
-                    emit_event(&window, EVENT_STAT_UPDATED, stat);
-                }
-            }
-        }
-
-        let success_count = total_files - (insert_errors * CHUNK_SIZE);
-
-        let message = if errors.is_empty() && insert_errors == 0 {
-            format!("Synchronisation terminée avec succès: {} fichiers traités", success_count)
-        } else {
-            format!("Synchronisation terminée: {} fichiers traités, {} erreurs", success_count, errors.len() + insert_errors)
         };
 
+        // Finalisation
         emit_finished_event(&window, EVENT_SCAN_FINISHED, ScanFinished {
             total: success_count,
-            message,
+            message: format!("Synchronisation terminée avec succès: {} fichiers traités", success_count),
         });
 
-        {
-            let repo = service_repository.lock().unwrap();
-            if let Ok(stat) = repo.get_stat() {
-                emit_event(&window, EVENT_STAT_UPDATED, stat);
-            }
-        }
+        context.emit_stat_update();
+
+        // Phase 3: Démarrer l'indexation du contenu automatiquement
+        println!("[INFO] Démarrage de l'indexation du contenu automatique");
+        index_content_async(window);
     });
 }
