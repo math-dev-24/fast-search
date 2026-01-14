@@ -3,7 +3,7 @@ import { NGi, NGrid, NTabs, NTabPane, NButton, NTable, NCard } from "naive-ui";
 import type { File } from "../../types";
 import Card from "./CardFile.vue";
 import Line from "./LineFile.vue";
-import { ref, Transition } from "vue";
+import { ref } from "vue";
 
 defineProps<{
   files: File[]

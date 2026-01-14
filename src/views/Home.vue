@@ -164,7 +164,6 @@ import {
   NText,
   useMessage
 } from 'naive-ui';
-import { Transition } from 'vue';
 import SearchWithAI from '../components/Search/AISearch.vue';
 import Folders from '../components/Folders/index.vue';
 import Files from '../components/Files/index.vue';

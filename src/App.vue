@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, Transition } from 'vue'
+import { ref } from 'vue'
 import { RouterView } from 'vue-router'
 import {
   darkTheme,

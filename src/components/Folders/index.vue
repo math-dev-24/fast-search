@@ -3,7 +3,7 @@ import { NBadge, NCollapse, NCollapseItem, NGi, NGrid, NTabs, NTabPane, NButton,
 import type { File } from "../../types";
 import Card from "./CardFolder.vue";
 import Line from "./LineFolder.vue";
-import { ref, Transition } from "vue";
+import { ref } from "vue";
 
 defineProps<{
   folders: File[]
