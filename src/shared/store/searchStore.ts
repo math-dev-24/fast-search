@@ -31,7 +31,8 @@ export const useSearchStore = defineStore('search', {
             limit: 1000,
             offset: 0,
             search_in_content: false,
-            path_pattern: null
+            path_pattern: null,
+            cursor: null
         },
         result: [],
         search: '',
@@ -93,7 +94,8 @@ export const useSearchStore = defineStore('search', {
                 limit: 100,
                 offset: 0,
                 search_in_content: false,
-                path_pattern: null
+                path_pattern: null,
+                cursor: null
             };
             this.result = [];
         },

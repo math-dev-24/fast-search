@@ -1,11 +1,10 @@
-use crate::application::factories::service_factory::get_service_repository;
 use crate::domain::entities::stat::Stat;
+use crate::shared::config::AppState;
+use crate::shared::helpers::with_service_repository_readonly;
 
 #[tauri::command]
-pub fn get_stat() -> Result<Stat, String> {
-    let service_repository = get_service_repository()?;
-    let stat = service_repository.get_stat()?;
-    Ok(stat)
+pub fn get_stat(state: tauri::State<'_, AppState>) -> Result<Stat, String> {
+    with_service_repository_readonly(&state, |repo| repo.get_stat())
 }
 
 

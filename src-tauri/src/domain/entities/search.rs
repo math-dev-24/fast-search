@@ -10,6 +10,7 @@ pub struct SearchQuery {
     pub offset: u32,
     pub search_in_content: bool,
     pub path_pattern: Option<String>,
+    pub cursor: Option<i64>,
 }
 
 impl Default for SearchQuery {
@@ -23,6 +24,7 @@ impl Default for SearchQuery {
             offset: 0,
             search_in_content: false,
             path_pattern: None,
+            cursor: None,
         }
     }
 }

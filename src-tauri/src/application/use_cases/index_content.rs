@@ -7,7 +7,6 @@ use crate::domain::entities::scan::{IndexProgress, IndexFinished};
 use crate::domain::entities::file::File;
 use crate::domain::services::content_indexer_service::ContentIndexerService;
 use crate::domain::services::file_service::FileService;
-use crate::application::factories::service_factory::get_service_repository;
 use crate::infrastructure::repository::sqlite::Db;
 
 
@@ -84,11 +83,11 @@ async fn process_single_file(
 
     let text_content = match content_indexer.index_file_content(&file) {
         Ok(content) => {
-            println!("[DEBUG] Indexation réussie: {} ({} chars)", file_path, content.len());
+            tracing::debug!("Indexation réussie: {} ({} chars)", file_path, content.len());
             content
         },
         Err(e) => {
-            println!("[WARNING] Échec indexation: {} - {}", file_path, e);
+            tracing::warn!("Échec indexation: {} - {}", file_path, e);
             // En cas d'erreur de lecture, marquer le fichier comme non indexable
             repo.update_file_index_status(&file, String::new(), false)
                 .map_err(|update_err| format!("Erreur mise à jour après échec pour {}: {}", file_path, update_err))?;
@@ -104,21 +103,22 @@ async fn process_single_file(
 }
 
 
-pub fn index_content_async(window: WebviewWindow) {
+pub fn index_content_async(
+    window: WebviewWindow,
+    service_repository: Arc<Mutex<FileService<Db>>>
+) {
     tauri::async_runtime::spawn(async move {
-        // Initialisation du service repository
-        let service_repository = match get_service_repository() {
-            Ok(repo) => Arc::new(Mutex::new(repo)),
-            Err(e) => {
-                emit_error_event(&window, EVENT_INDEX_ERROR, format!("Erreur initialisation: {}", e));
-                return;
-            }
-        };
 
         emit_started_event(&window, EVENT_INDEX_STARTED);
 
         let uncontent_indexed_files = {
-            let repo = service_repository.lock().unwrap();
+            let repo = match service_repository.lock() {
+                Ok(repo) => repo,
+                Err(e) => {
+                    emit_error_event(&window, EVENT_INDEX_ERROR, format!("Erreur accès repository: {}", e));
+                    return;
+                }
+            };
             match repo.get_uncontent_indexed_files() {
                 Ok(files) => files,
                 Err(e) => {
@@ -141,7 +141,7 @@ pub fn index_content_async(window: WebviewWindow) {
         // Initialisation du tracker de progrès
         let progress_tracker = Arc::new(Mutex::new(ProgressTracker::new(total_files)));
 
-        println!("[INFO] Démarrage de l'indexation de contenu pour {} fichiers", total_files);
+        tracing::info!("Démarrage de l'indexation de contenu pour {} fichiers", total_files);
         
         // Traitement séquentiel par chunks plus petit pour un meilleur feedback
         const CHUNK_SIZE_INDEX: usize = 10;
@@ -151,10 +151,10 @@ pub fn index_content_async(window: WebviewWindow) {
             .collect();
 
         let total_chunks = chunks.len();
-        println!("[INFO] Traitement par {} chunks de {} fichiers", total_chunks, CHUNK_SIZE_INDEX);
+        tracing::info!("Traitement par {} chunks de {} fichiers", total_chunks, CHUNK_SIZE_INDEX);
 
         for (chunk_index, file_chunk) in chunks.into_iter().enumerate() {
-            println!("[INFO] Traitement du chunk {} / {}", chunk_index + 1, total_chunks);
+            tracing::info!("Traitement du chunk {} / {}", chunk_index + 1, total_chunks);
             
             // Traitement parallèle du chunk avec futures
             let mut handles = Vec::new();
@@ -171,77 +171,88 @@ pub fn index_content_async(window: WebviewWindow) {
             for handle in handles {
                 match handle.await {
                     Ok(result) => {
-                        let mut tracker = progress_tracker.lock().unwrap();
-                        tracker.increment_processed(result.is_ok());
+                        if let Ok(mut tracker) = progress_tracker.lock() {
+                            tracker.increment_processed(result.is_ok());
+                        }
 
                         if let Err(e) = result {
-                            eprintln!("[WARNING] Erreur indexation fichier: {}", e);
+                            tracing::warn!("Erreur indexation fichier: {}", e);
                         }
                     }
                     Err(e) => {
-                        eprintln!("[ERROR] Erreur task indexation: {}", e);
-                        let mut tracker = progress_tracker.lock().unwrap();
-                        tracker.increment_processed(false);
+                        tracing::error!("Erreur task indexation: {}", e);
+                        if let Ok(mut tracker) = progress_tracker.lock() {
+                            tracker.increment_processed(false);
+                        }
                     }
                 }
             }
 
             // Mise à jour du progrès après chaque chunk
             {
-                let mut tracker = progress_tracker.lock().unwrap();
-                let progress = tracker.get_progress();
-                let message = format!(
-                    "Indexation du contenu: {} fichiers traités sur {} ({}%)",
-                    tracker.processed_files,
-                    total_files,
-                    (progress * 100.0) as usize
-                );
+                if let Ok(mut tracker) = progress_tracker.lock() {
+                    let progress = tracker.get_progress();
+                    let message = format!(
+                        "Indexation du contenu: {} fichiers traités sur {} ({}%)",
+                        tracker.processed_files,
+                        total_files,
+                        (progress * 100.0) as usize
+                    );
 
-                emit_event(&window, EVENT_INDEX_PROGRESS, IndexProgress {
-                    progress,
-                    message,
-                    processed: tracker.processed_files,
-                    total: total_files,
-                });
+                    emit_event(&window, EVENT_INDEX_PROGRESS, IndexProgress {
+                        progress,
+                        message,
+                        processed: tracker.processed_files,
+                        total: total_files,
+                    });
 
-                tracker.update_progress_time();
+                    tracker.update_progress_time();
+                }
             }
 
             // IMPORTANT: Émettre les stats après chaque chunk
             if let Ok(repo) = service_repository.lock() {
                 if let Ok(stat) = repo.get_stat() {
-                    println!("[DEBUG] Émission des stats après chunk {}: {} fichiers indexés", chunk_index + 1, stat.content_indexed_files);
+                    tracing::debug!("Émission des stats après chunk {}: {} fichiers indexés", chunk_index + 1, stat.content_indexed_files);
                     emit_event(&window, EVENT_STAT_UPDATED, stat);
                 }
             }
         }
 
-        // Mise à jour finale des statistiques
-        if let Ok(repo) = service_repository.lock() {
-            if let Ok(stat) = repo.get_stat() {
-                emit_event(&window, EVENT_STAT_UPDATED, stat);
+
+        let final_stat = {
+            if let Ok(repo) = service_repository.lock() {
+                repo.get_stat().ok()
+            } else {
+                None
             }
+        };
+        
+        if let Some(stat) = final_stat {
+            emit_event(&window, EVENT_STAT_UPDATED, stat);
         }
 
-        // Émission de l'événement de fin
-        let final_tracker = progress_tracker.lock().unwrap();
-        let message = format!(
-            "Indexation terminée: {} fichiers traités ({} indexés avec succès, {} échecs)",
-            final_tracker.processed_files,
-            final_tracker.successful_files,
-            final_tracker.failed_files
-        );
+        
+        let message = if let Ok(final_tracker) = progress_tracker.lock() {
+            format!(
+                "Indexation terminée: {} fichiers traités ({} indexés avec succès, {} échecs)",
+                final_tracker.processed_files,
+                final_tracker.successful_files,
+                final_tracker.failed_files
+            )
+        } else {
+            "Indexation terminée".to_string()
+        };
+
+        let total_processed = if let Ok(tracker) = progress_tracker.lock() {
+            tracker.processed_files
+        } else {
+            0
+        };
 
         emit_finished_event(&window, EVENT_INDEX_FINISHED, IndexFinished {
-            total: final_tracker.processed_files,
+            total: total_processed,
             message,
         });
-
-        {
-            let repo = service_repository.lock().unwrap();
-            if let Ok(stat) = repo.get_stat() {
-                emit_event(&window, EVENT_STAT_UPDATED, stat);
-            }
-        }
     });
 }

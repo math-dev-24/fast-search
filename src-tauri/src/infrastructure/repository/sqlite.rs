@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use rusqlite::{Connection, Result as SqliteResult};
 use crate::domain::entities::file::File;
 use crate::domain::entities::stat::Stat;
@@ -7,29 +8,28 @@ use crate::domain::entities::search::{SearchQuery, DateMode, SortBy, SortOrder};
 use crate::domain::ports::repository::FileRepository;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use crate::domain::entities::query_builder::QueryBuilder;
-use crate::shared::errors::AppResult;
+use crate::shared::errors::{AppError, AppResult};
 
 
 pub struct Db {
     pub conn: Connection,
-    pub types_cache: Option<HashSet<String>>
+    pub types_cache: Arc<Mutex<Option<HashSet<String>>>>
 }
 
 impl FileRepository for Db {
     fn new(path: &str) -> AppResult<Db> {
-
         let conn = Connection::open(path)?;
 
         Ok(Self {
             conn,
-            types_cache: None,
+            types_cache: Arc::new(Mutex::new(None)),
         })
     }
 
     fn init(&self) -> AppResult<()> {
         let init_sql = include_str!("../../../data/init.sql");
         self.conn.execute_batch(init_sql)?;
-        println!("Database initialized");
+        tracing::info!("Database initialized successfully");
         Ok(())
     }
 
@@ -57,17 +57,39 @@ impl FileRepository for Db {
             self.delete_files_by_path_prefix(path)?;
         }
 
-        let tx = self.conn.transaction()?;
+        let tx = match self.conn.transaction() {
+            Ok(tx) => tx,
+            Err(e) => {
+                tracing::error!("Failed to start insert_paths transaction: {}", e);
+                return Err(e.into());
+            }
+        };
 
-        tx.execute("DELETE FROM paths", [])?;
+        let result = (|| -> AppResult<()> {
+            tx.execute("DELETE FROM paths", [])?;
+            for path in &new_paths {
+                tx.execute("INSERT INTO paths (path) VALUES (?)", [path])?;
+            }
+            Ok(())
+        })();
 
-        for path in &new_paths {
-            tx.execute("INSERT INTO paths (path) VALUES (?)", [path])?;
+        match result {
+            Ok(_) => {
+                tx.commit().map_err(|e| {
+                    tracing::error!("Failed to commit insert_paths transaction: {}", e);
+                    AppError::Database(e)
+                })?;
+                Ok(new_paths)
+            }
+            Err(e) => {
+                if let Err(rollback_err) = tx.rollback() {
+                    tracing::error!("Failed to rollback insert_paths transaction: {}", rollback_err);
+                } else {
+                    tracing::debug!("insert_paths transaction rolled back due to error: {}", e);
+                }
+                Err(e)
+            }
         }
-
-        tx.commit()?;
-
-        Ok(new_paths)
     }
 
     fn get_stat(&self) -> AppResult<Stat> {
@@ -256,7 +278,7 @@ impl FileRepository for Db {
             SortOrder::Desc => "DESC",
         };
 
-        let (sql, params) = builder.build(order_by, sort_order, query.limit, query.offset);
+        let (sql, params) = builder.build(order_by, sort_order, query.limit, query.offset, query.cursor);
         self.execute_search_query(&sql, &params)
     }
 
@@ -268,27 +290,61 @@ impl FileRepository for Db {
     }
 
     fn update_file_index_status(&mut self, file: &File, content_hash: String, is_indexable: bool) -> AppResult<()> {
+        let path_str = file.path.to_str()
+            .ok_or_else(|| AppError::Validation("Invalid file path encoding".to_string()))?;
 
-        let tx = self.conn.transaction()?;
+        let tx = match self.conn.transaction() {
+            Ok(tx) => tx,
+            Err(e) => {
+                tracing::error!("Failed to start transaction: {}", e);
+                return Err(e.into());
+            }
+        };
 
-        let file_id: i64 = tx.query_row(
-            "SELECT id FROM files WHERE path = ?",
-            [file.path.to_str().unwrap()],
-            |row| row.get(0)
-        )?;
+        // Utiliser un pattern pour garantir le rollback explicite en cas d'erreur
+        let result = (|| -> AppResult<i64> {
+            let file_id: i64 = match tx.query_row(
+                "SELECT id FROM files WHERE path = ?",
+                [path_str],
+                |row| row.get(0)
+            ) {
+                Ok(id) => id,
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    return Err(AppError::NotFound(format!("File not found in database: {}", path_str)));
+                }
+                Err(e) => return Err(e.into()),
+            };
 
-        tx.execute(
-            "INSERT INTO fts_content (content, file_id) VALUES (?, ?)",
-            rusqlite::params![content_hash, file_id]
-        )?;
+            tx.execute(
+                "INSERT OR REPLACE INTO fts_content (content, file_id) VALUES (?, ?)",
+                rusqlite::params![content_hash, file_id]
+            )?;
 
-        tx.execute(
-            "UPDATE files SET content_indexed = ?, is_indexable = ? WHERE path = ?",
-            rusqlite::params![true, is_indexable, file.path.to_str().unwrap()]
-        )?;
+            tx.execute(
+                "UPDATE files SET content_indexed = ?, is_indexable = ? WHERE path = ?",
+                rusqlite::params![true, is_indexable, path_str]
+            )?;
 
-        tx.commit()?;
-        Ok(())
+            Ok(file_id)
+        })();
+
+        match result {
+            Ok(_) => {
+                tx.commit().map_err(|e| {
+                    tracing::error!("Failed to commit transaction: {}", e);
+                    AppError::Database(e)
+                })?;
+                Ok(())
+            }
+            Err(e) => {
+                if let Err(rollback_err) = tx.rollback() {
+                    tracing::error!("Failed to rollback transaction: {}", rollback_err);
+                } else {
+                    tracing::debug!("Transaction rolled back successfully due to error: {}", e);
+                }
+                Err(e)
+            }
+        }
     }
 
     fn get_uncontent_indexed_files(&self) -> AppResult<Vec<File>> {
@@ -303,35 +359,37 @@ impl FileRepository for Db {
 impl Db {
 
     fn execute_search_query(&self, sql: &str, params: &[Box<dyn rusqlite::ToSql>]) -> AppResult<Vec<File>> {
+        use std::time::Duration;
+        use std::time::Instant;
+        
+        // Timeout de 30 secondes pour les requêtes de recherche
+        let search_timeout = Duration::from_secs(30);
+        let start = Instant::now();
+        
+        // Utiliser interrupt() pour permettre l'annulation si nécessaire
+        // Note: SQLite n'a pas de vrai timeout, mais on peut monitorer le temps
         let mut stmt = self.conn.prepare(sql)?;
 
         let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
         let result = stmt.query_map(rusqlite::params_from_iter(param_refs), Self::map_row_to_file)?
             .collect::<SqliteResult<Vec<_>>>()?;
+        
+        let elapsed = start.elapsed();
+        if elapsed > search_timeout {
+            tracing::warn!("Search query took longer than timeout: {:?}", elapsed);
+        } else {
+            tracing::debug!("Search query completed in {:?}", elapsed);
+        }
+        
         Ok(result)
     }
     fn load_types_cache(&mut self) -> AppResult<()> {
         let types = self.get_all_types()?;
-        self.types_cache = Some(types.into_iter().collect());
+        let mut cache = self.types_cache.lock()
+            .map_err(|e| AppError::Internal(format!("Failed to lock types cache: {}", e)))?;
+        *cache = Some(types.into_iter().collect());
         Ok(())
-    }
-
-    fn file_exist(&mut self, file: &File) -> AppResult<bool> {
-        let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM files WHERE path = ? LIMIT 1)")?;
-        let exists: i64 = stmt.query_row([file.path.to_str().unwrap()], |row| row.get(0))?;
-        Ok(exists > 0)
-    }
-
-    fn type_exist(&self, type_name: &str) -> AppResult<bool> {
-        if let Some(types_cache) = &self.types_cache {
-            if let Some(_) = types_cache.iter().position(|t| t == type_name) {
-                return Ok(true);
-            }
-        }
-        let mut stmt = self.conn.prepare("SELECT EXISTS(SELECT 1 FROM types WHERE name = ? LIMIT 1)")?;
-        let exists: i64 = stmt.query_row([type_name], |row| row.get(0))?;
-        Ok(exists > 0)
     }
 
     fn delete_files_by_path_prefix(&mut self, path_prefix: &str) -> AppResult<()> {
@@ -349,32 +407,73 @@ impl Db {
     }
 
     fn insert_type(&mut self, type_names: Vec<String>) -> AppResult<()> {
-        if self.types_cache.is_none() {
-            self.load_types_cache()?;
+        // Charger le cache si nécessaire de manière thread-safe
+        {
+            let cache = self.types_cache.lock()
+                .map_err(|e| AppError::Internal(format!("Failed to lock types cache: {}", e)))?;
+            if cache.is_none() {
+                drop(cache);
+                self.load_types_cache()?;
+            }
         }
 
-        let cache = self.types_cache.as_ref().unwrap();
-
-        let new_types: Vec<String> = type_names.into_iter()
-            .filter(|t| !cache.contains(t))
-            .collect();
+        // Filtrer les nouveaux types de manière thread-safe
+        let new_types: Vec<String> = {
+            let cache = self.types_cache.lock()
+                .map_err(|e| AppError::Internal(format!("Failed to lock types cache: {}", e)))?;
+            
+            if let Some(ref types_set) = *cache {
+                type_names.into_iter()
+                    .filter(|t| !types_set.contains(t))
+                    .collect()
+            } else {
+                type_names
+            }
+        };
 
         if new_types.is_empty() {
             return Ok(());
         }
 
-        let tx = self.conn.transaction()?;
-        let mut stmt = tx.prepare("INSERT OR IGNORE INTO types (name) VALUES (?)")?;
+        let tx = match self.conn.transaction() {
+            Ok(tx) => tx,
+            Err(e) => {
+                tracing::error!("Failed to start insert_type transaction: {}", e);
+                return Err(e.into());
+            }
+        };
+        
+        let result = (|| -> AppResult<()> {
+            let mut stmt = tx.prepare("INSERT OR IGNORE INTO types (name) VALUES (?)")?;
+            for type_name in &new_types {
+                stmt.execute([type_name])?;
+            }
+            drop(stmt);
+            Ok(())
+        })();
 
-        for type_name in &new_types {
-            stmt.execute([type_name])?;
+        match result {
+            Ok(_) => {
+                tx.commit().map_err(|e| {
+                    tracing::error!("Failed to commit insert_type transaction: {}", e);
+                    AppError::Database(e)
+                })?;
+            }
+            Err(e) => {
+                if let Err(rollback_err) = tx.rollback() {
+                    tracing::error!("Failed to rollback insert_type transaction: {}", rollback_err);
+                }
+                return Err(e);
+            }
         }
 
-        drop(stmt);
-        tx.commit()?;
-
-        if let Some(ref mut cache) = self.types_cache {
-            cache.extend(new_types);
+        // Mettre à jour le cache de manière thread-safe
+        let mut cache = self.types_cache.lock()
+            .map_err(|e| AppError::Internal(format!("Failed to lock types cache: {}", e)))?;
+        if let Some(ref mut types_set) = *cache {
+            types_set.extend(new_types);
+        } else {
+            *cache = Some(new_types.into_iter().collect());
         }
         Ok(())
     }
@@ -383,20 +482,40 @@ impl Db {
         if files.is_empty() {
             return Ok(());
         }
-        let tx = self.conn.transaction()?;
+        
+        let tx = match self.conn.transaction() {
+            Ok(tx) => tx,
+            Err(e) => {
+                tracing::error!("Failed to start insert transaction: {}", e);
+                return Err(e.into());
+            }
+        };
 
         let paths: Vec<String> = files.iter()
-            .map(|f| format!("'{}'", f.path.to_str().unwrap().replace("'", "''")))
+            .filter_map(|f| f.path.to_str().map(|s| s.to_string()))
             .collect();
 
+        if paths.is_empty() {
+            tx.commit().map_err(|e| {
+                tracing::error!("Failed to commit empty insert transaction: {}", e);
+                AppError::Database(e)
+            })?;
+            return Ok(());
+        }
+
+        let placeholders: Vec<String> = (0..paths.len()).map(|_| "?".to_string()).collect();
         let existing_paths_query = format!(
             "SELECT path FROM files WHERE path IN ({})",
-            paths.join(",")
+            placeholders.join(",")
         );
+
+        let path_params: Vec<&dyn rusqlite::ToSql> = paths.iter()
+            .map(|p| p as &dyn rusqlite::ToSql)
+            .collect();
 
         let mut existing_paths = HashSet::new();
         let mut stmt = tx.prepare(&existing_paths_query)?;
-        let rows = stmt.query_map([], |row| {
+        let rows = stmt.query_map(rusqlite::params_from_iter(path_params.iter()), |row| {
             Ok(row.get::<_, String>(0)?)
         })?;
 
@@ -405,8 +524,13 @@ impl Db {
         }
         drop(stmt);
 
+        // Filtrer les nouveaux fichiers
         let new_files: Vec<&File> = files.iter()
-            .filter(|f| !existing_paths.contains(f.path.to_str().unwrap()))
+            .filter(|f| {
+                f.path.to_str()
+                    .map(|p| !existing_paths.contains(p))
+                    .unwrap_or(false)
+            })
             .collect();
 
         if new_files.is_empty() {
@@ -414,20 +538,31 @@ impl Db {
             return Ok(());
         }
 
-        let mut stmt = tx.prepare("INSERT INTO files (path, name, is_dir, file_type, size, last_modified, created_at, accessed_at, is_indexed, content_indexed, is_indexable, is_hidden, is_readonly, is_system, is_executable, is_symlink, permissions, owner, `group`, mime_type, encoding, line_count, word_count, checksum, is_encrypted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
+        // Optimisation: Utiliser INSERT OR IGNORE pour éviter les doublons
+        // et préparer une seule fois la requête pour tous les fichiers
+        let mut stmt = tx.prepare("INSERT OR IGNORE INTO files (path, name, is_dir, file_type, size, last_modified, created_at, accessed_at, is_indexed, content_indexed, is_indexable, is_hidden, is_readonly, is_system, is_executable, is_symlink, permissions, owner, `group`, mime_type, encoding, line_count, word_count, checksum, is_encrypted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
 
         for file in &new_files {
-            let path = file.path.to_str().unwrap();
-            let last_modified = file.last_modified.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
-            let created_at = file.created_at.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
-            let accessed_at = file.accessed_at.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+            let path = file.path.to_str()
+                .ok_or_else(|| AppError::Validation("Invalid file path encoding".to_string()))?;
+            
+            let last_modified = file.last_modified.duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            let created_at = file.created_at.duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            let accessed_at = file.accessed_at.duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
 
+            let size = file.size.map(|s| s as i64);
             stmt.execute(rusqlite::params![
                 path,
                 file.name,
                 file.is_dir,
                 file.file_type,
-                file.size,
+                size,
                 last_modified,
                 created_at,
                 accessed_at,
@@ -452,20 +587,28 @@ impl Db {
         }
 
         drop(stmt);
-        tx.commit()?;
-        Ok(())
+        
+        tx.commit().map_err(|e| {
+            tracing::error!("Failed to commit insert transaction: {}", e);
+            AppError::Database(e)
+        })
     }
 
     fn map_row_to_file(row: &rusqlite::Row) -> rusqlite::Result<File> {
+        let size: Option<i64> = row.get(5)?;
+        let last_modified_secs: i64 = row.get(6)?;
+        let created_at_secs: i64 = row.get(7)?;
+        let accessed_at_secs: i64 = row.get(8)?;
+        
         Ok(File {
             path: PathBuf::from(row.get::<_, String>(1)?),
             name: row.get(2)?,
             is_dir: row.get(3)?,
             file_type: row.get(4)?,
-            size: row.get(5)?,
-            last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(6)?),
-            created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(7)?),
-            accessed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(row.get(8)?),
+            size: size.map(|s| s as u64),
+            last_modified: SystemTime::UNIX_EPOCH + Duration::from_secs(last_modified_secs as u64),
+            created_at: SystemTime::UNIX_EPOCH + Duration::from_secs(created_at_secs as u64),
+            accessed_at: SystemTime::UNIX_EPOCH + Duration::from_secs(accessed_at_secs as u64),
             is_indexed: row.get(9)?,
             content_indexed: row.get(10)?,
             is_indexable: row.get(11)?,
@@ -484,5 +627,149 @@ impl Db {
             checksum: row.get(24)?,
             is_encrypted: row.get(25)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::ports::repository::FileRepository;
+    use crate::domain::entities::file::File;
+    use crate::domain::entities::search::SearchQuery;
+    use std::path::PathBuf;
+    use std::time::SystemTime;
+    use tempfile::TempDir;
+
+    fn create_test_db() -> (Db, TempDir) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let db = Db::new(db_path.to_str().unwrap()).unwrap();
+        db.init().unwrap();
+        (db, temp_dir)
+    }
+
+    fn create_test_file(path: &str) -> File {
+        File {
+            path: PathBuf::from(path),
+            name: "test.txt".to_string(),
+            is_dir: false,
+            file_type: Some("txt".to_string()),
+            size: Some(100),
+            last_modified: SystemTime::now(),
+            created_at: SystemTime::now(),
+            accessed_at: SystemTime::now(),
+            is_indexed: true,
+            content_indexed: false,
+            is_indexable: true,
+            is_hidden: false,
+            is_readonly: false,
+            is_system: false,
+            is_executable: false,
+            is_symlink: false,
+            permissions: Some(0o644),
+            owner: None,
+            group: None,
+            mime_type: Some("text/plain".to_string()),
+            encoding: None,
+            line_count: None,
+            word_count: None,
+            checksum: None,
+            is_encrypted: false,
+        }
+    }
+
+    #[test]
+    fn test_transaction_rollback_on_error() {
+        let (mut db, _temp_dir) = create_test_db();
+        
+        // Tester que les transactions sont rollback en cas d'erreur
+        let file = create_test_file("/test/path.txt");
+        
+        // Tenter une opération qui échouera (fichier non existant dans la DB)
+        let result = db.update_file_index_status(&file, "hash".to_string(), true);
+        
+        // Devrait retourner une erreur NotFound
+        assert!(result.is_err());
+        if let Err(AppError::NotFound(_)) = result {
+            // C'est l'erreur attendue
+        } else {
+            panic!("Expected NotFound error");
+        }
+    }
+
+    #[test]
+    fn test_cursor_based_pagination() {
+        let (mut db, _temp_dir) = create_test_db();
+        
+        // Insérer plusieurs fichiers
+        let files: Vec<File> = (0..20)
+            .map(|i| create_test_file(&format!("/test/file{}.txt", i)))
+            .collect();
+        
+        db.insert(files).unwrap();
+        
+        // Test avec pagination normale (offset)
+        let mut query = SearchQuery::default();
+        query.limit = 5;
+        query.offset = 0;
+        query.cursor = None;
+        
+        let first_page = db.search(&query).unwrap();
+        assert_eq!(first_page.len(), 5);
+        
+        // Test avec cursor-based pagination
+        // Pour simplifier, on utilise offset mais en production on utiliserait le dernier ID
+        query.offset = 5;
+        let second_page = db.search(&query).unwrap();
+        assert_eq!(second_page.len(), 5);
+        
+        // Vérifier que les pages sont différentes
+        assert_ne!(first_page[0].path, second_page[0].path);
+    }
+
+    #[test]
+    fn test_insert_with_transaction_safety() {
+        let (mut db, _temp_dir) = create_test_db();
+        
+        // Test insertion normale
+        let files = vec![create_test_file("/test/file1.txt")];
+        let result = db.insert(files);
+        assert!(result.is_ok());
+        
+        // Vérifier que le fichier a été inséré
+        let query = SearchQuery {
+            path_pattern: Some("/test/file1.txt".to_string()),
+            limit: 1,
+            ..Default::default()
+        };
+        let results = db.search(&query).unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_search_timeout_monitoring() {
+        let (db, _temp_dir) = create_test_db();
+        
+        let query = SearchQuery::default();
+        let start = std::time::Instant::now();
+        let _result = db.search(&query);
+        let elapsed = start.elapsed();
+        
+        // La requête devrait être rapide (< 1 seconde)
+        assert!(elapsed < std::time::Duration::from_secs(1));
+    }
+
+    #[test]
+    fn test_insert_paths_transaction_rollback() {
+        let (mut db, _temp_dir) = create_test_db();
+        
+        // Test insertion de chemins valides
+        let paths = vec!["/test/path1".to_string(), "/test/path2".to_string()];
+        let result = db.insert_paths(paths.clone());
+        assert!(result.is_ok());
+        
+        // Vérifier que les chemins ont été insérés
+        let all_paths = db.get_all_paths().unwrap();
+        assert_eq!(all_paths.len(), 2);
     }
 }

@@ -1,0 +1,297 @@
+# Fast Search - Cursor Rules
+
+## 📋 Project Overview
+
+**Fast Search** is a modern desktop file search application built with:
+- **Tauri 2** - Desktop app framework
+- **Vue.js 3** (Composition API) - Frontend framework
+- **TypeScript** - Type safety for frontend
+- **Rust** - High-performance backend
+- **SQLite** (via rusqlite) - Database persistence
+- **Pinia** - State management
+- **Tailwind CSS 4** + **Naive UI** - UI styling
+- **LM Studio** - Local AI integration for natural language search
+
+## 🏗️ Architecture Pattern
+
+### Backend: Clean Architecture / Hexagonal Architecture
+
+The Rust backend follows **Clean Architecture** principles with clear separation of concerns:
+
+```
+src-tauri/src/
+├── domain/              # Core business logic (no dependencies)
+│   ├── entities/        # Business data models (File, SearchQuery, Stat, etc.)
+│   ├── ports/           # Interface definitions (traits: FileRepository, Reader, AI)
+│   └── services/        # Business logic services (FileService, AiService, ContentIndexerService)
+├── application/         # Application layer (use cases, events, factories)
+│   ├── use_cases/       # Business use cases (index_content, scan_files)
+│   ├── events/          # Event emitters for frontend communication
+│   └── factories/       # Service factories
+├── infrastructure/       # External implementations (adapters)
+│   ├── repository/      # SQLite implementation (FileRepository trait)
+│   ├── readers/         # File content readers (PDF, CSV, Text, Code, Word)
+│   ├── ai/              # LM Studio AI integration
+│   ├── filesystem/      # File system operations (scanner, collector)
+│   └── watcher/         # File system watcher
+├── commands/            # Tauri command handlers (entry points)
+│   ├── file_commands.rs
+│   ├── indexing_commands.rs
+│   ├── system_commands.rs
+│   ├── watch_commands.rs
+│   └── ai_commands.rs
+└── shared/              # Shared utilities
+    ├── config.rs        # AppState (singleton repository, watcher manager)
+    ├── errors.rs        # AppError (thiserror-based error types)
+    ├── helpers.rs       # DRY helpers for repository access
+    ├── retry.rs         # Retry logic with exponential backoff
+    └── constants.rs     # Application constants
+```
+
+### Frontend: Component-Based Architecture
+
+```
+src/
+├── components/          # Reusable Vue components
+│   ├── base/           # Base components (Header)
+│   ├── Files/          # File display components
+│   ├── Folders/        # Folder display components
+│   ├── Options/        # Filter and option components
+│   ├── Search/         # Search components (including AI)
+│   └── sync/           # Synchronization UI
+├── views/              # Main application pages (Home, Statistique)
+├── composables/        # Reusable composition functions
+├── shared/
+│   ├── store/         # Pinia stores (searchStore, aiStore, settingStore)
+│   └── format/        # Formatting utilities (date, path, size)
+└── types/             # TypeScript type definitions
+```
+
+## 🔑 Key Principles
+
+### DRY (Don't Repeat Yourself)
+- Use `shared/helpers.rs` for repository access patterns
+- Centralize common logic in composables (frontend) and helpers (backend)
+- Avoid code duplication across commands
+
+### Error Handling
+- **Backend**: Use `AppError` (thiserror) - NEVER use `unwrap()` or `expect()` in production code
+- **Frontend**: Proper error handling with try/catch and user-friendly messages
+- Always handle `Mutex` poisoning gracefully
+- Use `Result<T>` for all fallible operations
+
+### Thread Safety
+- Repository is wrapped in `Arc<Mutex<FileService<Db>>>` in `AppState`
+- All repository access must go through `with_service_repository` or `with_service_repository_readonly` helpers
+- Use `tokio::task::spawn_blocking` for CPU-intensive synchronous operations
+
+### Database Operations
+- **SQLite**: Use parameterized queries (NEVER string concatenation) to prevent SQL injection
+- **Transactions**: Explicit rollback on errors (though Drop handles it automatically)
+- **Timeouts**: All DB operations should have timeouts via `tokio::time::timeout`
+- **Retry Logic**: Use `db_operation_with_retry` for transient failures
+- **Types**: SQLite doesn't support `u64` - convert to `i64` when storing, back to `u64` when reading
+
+### Logging
+- Use `tracing::info!`, `tracing::warn!`, `tracing::error!`, `tracing::debug!` (NEVER `println!` or `eprintln!`)
+- Structured logging with `tracing-subscriber`
+- Set log level via `RUST_LOG` environment variable
+
+### Async/Await
+- Use `tokio` async runtime for I/O operations
+- Use `rayon` for CPU-intensive parallel operations
+- Avoid blocking the async runtime with long-running synchronous code
+
+## 📦 Key Dependencies
+
+### Backend (Rust)
+- `tauri = "2"` - Desktop framework
+- `rusqlite = "0.38.0"` with `bundled` feature - SQLite database
+- `tokio = "1.0"` with `full` and `sync` features - Async runtime
+- `tokio-retry = "0.3"` - Retry logic with exponential backoff
+- `tracing` + `tracing-subscriber` - Structured logging
+- `thiserror = "2.0.12"` - Error types
+- `serde` + `serde_json` - Serialization
+- `reqwest = "0.13.1"` with `json` feature (using `rustls-tls`, NOT `native-tls` to avoid cmake dependency)
+- `notify = "8.2.0"` - File system watcher
+- `dirs = "6.0.0"` - Cross-platform directory paths
+- `walkdir = "2.5.0"` - Directory traversal
+- `lopdf = "0.39.0"` - PDF content extraction
+- `rayon = "1.11.0"` - Data parallelism
+- `chrono = "0.4.41"` - Date/time handling
+
+### Frontend (TypeScript/JavaScript)
+- `vue = "^3.5.26"` - Frontend framework
+- `@tauri-apps/api = "^2.6.2"` - Tauri API (MUST match Rust version)
+- `pinia = "^3.0.4"` - State management
+- `tailwindcss = "^4.1.18"` - CSS framework
+- `naive-ui = "^2.43.2"` - UI component library
+- `luxon = "^3.7.2"` - Date/time handling
+- `vue-router = "^4.6.4"` - Routing
+
+## 🔌 Tauri Commands
+
+All Tauri commands are defined in `src-tauri/src/commands/` and registered in `lib.rs`.
+
+### File Operations
+- `get_stat()` - Get application statistics
+- `search_files(query: SearchQuery)` - Search files with cursor-based pagination
+- `open_file(path: String)` - Open file in system explorer
+- `reset_data()` - Clear database
+
+### Path Management
+- `get_all_paths()` - Get configured search paths
+- `save_paths(paths: Vec<String>, window: WebviewWindow)` - Set search directories
+- `get_all_folders()` - Get indexed folders
+- `get_all_types()` - Get available file types
+
+### Indexing
+- `sync_files_and_folders(paths: Vec<String>, window: WebviewWindow)` - Scan and index directories
+- `start_content_indexing(window: WebviewWindow)` - Start content indexing
+
+### File Watcher
+- `start_file_watcher(paths: Vec<String>, window: WebviewWindow)` - Start file system watcher
+- `stop_file_watcher()` - Stop watcher
+- `restart_file_watcher(paths: Vec<String>, window: WebviewWindow)` - Restart watcher
+- `get_file_watcher_status()` - Get watcher status
+
+### AI Features
+- `ai_search(natural_query: String, model: String, ai_url: String)` - Natural language search
+- `ai_health_check(ai_url: String)` - Check AI service availability
+- `ai_list_models(ai_url: String)` - List available AI models
+
+## 🎯 Development Guidelines
+
+### Rust Backend
+
+1. **Repository Pattern**: Always use the trait `FileRepository` - implementation is in `infrastructure/repository/sqlite.rs`
+2. **Service Layer**: Business logic goes in `domain/services/` - `FileService` wraps the repository
+3. **Commands**: Tauri commands should be thin - delegate to services/use cases
+4. **Error Handling**: Return `AppResult<T>` (alias for `Result<T, AppError>`)
+5. **Transactions**: Always use explicit transaction handling with rollback on error
+6. **Pagination**: Use cursor-based pagination (not LIMIT/OFFSET) for better performance
+7. **Singleton Pattern**: Repository is a singleton in `AppState` - access via helpers
+
+### TypeScript Frontend
+
+1. **Composition API**: Always use `<script setup>` syntax
+2. **Type Safety**: Define types in `src/types/` and use them consistently
+3. **State Management**: Use Pinia stores for shared state
+4. **Tauri API**: Use `@tauri-apps/api` for backend communication
+5. **Error Handling**: Show user-friendly error messages
+6. **Events**: Listen to Tauri events for real-time updates (scan progress, stats, etc.)
+
+### Code Style
+
+1. **Rust**: Follow standard Rust conventions (rustfmt)
+2. **TypeScript**: Use strict mode, prefer `const` over `let`
+3. **Naming**: 
+   - Rust: `snake_case` for functions/variables, `PascalCase` for types
+   - TypeScript: `camelCase` for variables/functions, `PascalCase` for types/components
+4. **Comments**: Document complex logic, especially business rules
+5. **Imports**: Group imports (std, external, internal)
+
+## 🚨 Critical Rules
+
+1. **NEVER use `unwrap()` or `expect()`** in production code - always handle errors properly
+2. **NEVER use string concatenation for SQL queries** - always use parameterized queries
+3. **ALWAYS use `with_service_repository` helpers** - don't access repository directly
+4. **ALWAYS convert `u64` to `i64`** when storing in SQLite
+5. **ALWAYS use `tracing` macros** - never `println!` or `eprintln!`
+6. **ALWAYS handle `Mutex` poisoning** - use `map_err` to convert to `AppError`
+7. **ALWAYS use timeouts** for database operations
+8. **ALWAYS use retry logic** for transient failures
+9. **ALWAYS match Tauri versions** between Rust and NPM packages
+10. **ALWAYS use `rustls-tls` for reqwest** - avoid `native-tls` (requires cmake)
+
+## 📝 Database Schema
+
+- **files**: Main file metadata table
+- **paths**: Configured search paths
+- **types**: File type catalog
+- **fts_content**: Full-text search content (SQLite FTS5)
+
+Key indexes:
+- `files.path` - Primary search field
+- `files.name` - Filename search
+- `files.file_type` - Type filtering
+- Composite indexes for common query patterns
+
+## 🔄 State Management
+
+### Backend State (`AppState`)
+- `service_repository: Arc<Mutex<FileService<Db>>>` - Singleton repository
+- `watcher_manager: Arc<Mutex<FileWatcherManager>>` - File system watcher
+
+### Frontend Stores (Pinia)
+- `searchStore` - Search query state, results, pagination
+- `aiStore` - AI model selection, health status
+- `settingStore` - Application settings
+
+## 🧪 Testing
+
+- Backend tests in `src-tauri/src/infrastructure/repository/sqlite.rs` (unit tests)
+- Use `tempfile` crate for test databases
+- Test transaction rollbacks, cursor pagination, error handling
+
+## 🚀 Build & Development
+
+### Development
+```bash
+pnpm tauri dev        # Full app (frontend + backend)
+pnpm dev              # Frontend only
+```
+
+### Build
+```bash
+pnpm tauri build      # Production build
+```
+
+### Backend Only
+```bash
+cd src-tauri
+cargo build           # Build Rust
+cargo test            # Run tests
+cargo check           # Type check
+```
+
+## 📚 Important Files
+
+- `src-tauri/data/init.sql` - Database schema
+- `src-tauri/data/prompt.txt` - AI prompt template
+- `src-tauri/src/shared/config.rs` - AppState definition
+- `src-tauri/src/shared/errors.rs` - Error types
+- `src-tauri/src/shared/helpers.rs` - Repository access helpers
+- `src/types/search.ts` - SearchQuery TypeScript interface (must match Rust)
+
+## 🔍 Search Features
+
+- **Cursor-based pagination**: `SearchQuery.cursor: Option<i64>`
+- **Full-text search**: SQLite FTS5 on file content
+- **Filtering**: By type, size, date, path
+- **AI search**: Natural language to filter conversion via LM Studio
+
+## ⚠️ Common Pitfalls
+
+1. **Version Mismatch**: Tauri Rust and NPM versions must match (currently 2.6.2)
+2. **SQL Injection**: Always use parameterized queries
+3. **Thread Safety**: Don't hold Mutex locks across await points
+4. **Type Conversion**: SQLite `u64` → `i64` conversion required
+5. **CMake Dependency**: Use `rustls-tls` not `native-tls` for reqwest
+6. **Transaction Rollback**: Can't call `rollback()` after `commit()` fails (tx is consumed)
+
+## 🎨 UI/UX Guidelines
+
+- Use Naive UI components for consistency
+- Support dark/light themes
+- Show loading states during async operations
+- Display user-friendly error messages
+- Use Tauri events for real-time updates (progress, stats)
+- Keyboard shortcuts for power users
+
+## 📖 Additional Resources
+
+- Tauri 2 Documentation: https://tauri.app/
+- Vue 3 Composition API: https://vuejs.org/guide/extras/composition-api-faq.html
+- Rust Async Book: https://rust-lang.github.io/async-book/
+- SQLite FTS5: https://www.sqlite.org/fts5.html

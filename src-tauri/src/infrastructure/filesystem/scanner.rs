@@ -5,12 +5,13 @@ use crate::application::events::emitters::{emit_event, emit_error_event, emit_st
 use std::path::Path;
 use tauri::WebviewWindow;
 use std::sync::{Arc, Mutex};
-use crate::application::factories::service_factory::get_service_repository;
 use crate::domain::entities::file::File;
 use crate::domain::entities::scan::{ScanProgress, ScanCollected, InsertProgress, ScanFinished};
 use crate::domain::entities::progress::ScanProgressTracker;
 use crate::infrastructure::filesystem::collect::collect_files_and_folders;
 use crate::application::use_cases::index_content::index_content_async;
+use crate::domain::services::file_service::FileService;
+use crate::infrastructure::repository::sqlite::Db;
 
 const CHUNK_SIZE: usize = 500;
 
@@ -52,30 +53,30 @@ fn collect_all_files(paths: &[String], context: &ScanContext) -> Result<Vec<File
         let progress_tracker_clone = context.progress_tracker.clone();
 
         let files_for_path = collect_files_and_folders(path_obj, move |current, message| {
-            let mut tracker = progress_tracker_clone.lock().unwrap();
-            tracker.current_path_index = path_index;
+            if let Ok(mut tracker) = progress_tracker_clone.lock() {
+                tracker.current_path_index = path_index;
 
-            if tracker.is_timeout() {
-                return;
-            }
+                if tracker.is_timeout() {
+                    return;
+                }
 
-            let path_progress = current as f64 / 1000.0;
-            let overall_progress = tracker.update_path_progress(path_progress);
+                let path_progress = current as f64 / 1000.0;
+                let overall_progress = tracker.update_path_progress(path_progress);
 
-            if tracker.should_update_progress() {
-                emit_event(&window_clone, EVENT_SCAN_PROGRESS, ScanProgress {
-                    progress: overall_progress,
-                    message: message.to_string(),
-                    current_path: path.clone(),
-                });
-                tracker.update_progress_time();
+                if tracker.should_update_progress() {
+                    emit_event(&window_clone, EVENT_SCAN_PROGRESS, ScanProgress {
+                        progress: overall_progress,
+                        message: message.to_string(),
+                        current_path: path.clone(),
+                    });
+                    tracker.update_progress_time();
+                }
             }
         });
 
         all_files.extend(files_for_path);
 
-        {
-            let mut tracker = context.progress_tracker.lock().unwrap();
+        if let Ok(mut tracker) = context.progress_tracker.lock() {
             tracker.next_path();
             tracker.set_total_files(all_files.len());
         }
@@ -95,13 +96,19 @@ fn insert_files_in_chunks(files: &[File], context: &ScanContext) -> Result<usize
 
     for (chunk_index, file_chunk) in files.chunks(CHUNK_SIZE).enumerate() {
         let insert_result = {
-            let mut repo = context.service_repository.lock().unwrap();
-            repo.insert(file_chunk.to_vec())
+            match context.service_repository.lock() {
+                Ok(mut repo) => repo.insert(file_chunk.to_vec()),
+                Err(e) => {
+                    let error_msg = format!("Failed to lock repository: {}", e);
+                    context.emit_scan_error(error_msg.clone());
+                    return Err(error_msg);
+                }
+            }
         };
 
         if let Err(e) = insert_result {
             insert_errors += 1;
-            println!("[WARNING] Chunk insertion error {}: {}", chunk_index, e);
+            tracing::warn!("Chunk insertion error {}: {}", chunk_index, e);
 
             if insert_errors > 5 {
                 let error_msg = "Too many insertion errors, scan stopped";
@@ -119,22 +126,19 @@ fn insert_files_in_chunks(files: &[File], context: &ScanContext) -> Result<usize
             total: total_files,
         });
 
-        println!("[DEBUG] Émission des stats après insertion chunk {}", chunk_index + 1);
+        tracing::debug!("Émission des stats après insertion chunk {}", chunk_index + 1);
         context.emit_stat_update();
     }
 
     Ok(total_files - (insert_errors * CHUNK_SIZE))
 }
 
-pub fn scan_files_async(window: WebviewWindow, paths: Vec<String>) {
+pub fn scan_files_async(
+    window: WebviewWindow,
+    paths: Vec<String>,
+    service_repository: Arc<Mutex<FileService<Db>>>
+) {
     tauri::async_runtime::spawn(async move {
-        let service_repository = match get_service_repository() {
-            Ok(repo) => Arc::new(Mutex::new(repo)),
-            Err(e) => {
-                emit_error_event(&window, EVENT_SCAN_ERROR, format!("Erreur initialisation: {}", e));
-                return;
-            }
-        };
 
         if paths.is_empty() {
             emit_finished_event(&window, EVENT_SCAN_FINISHED, ScanFinished {
@@ -200,7 +204,8 @@ pub fn scan_files_async(window: WebviewWindow, paths: Vec<String>) {
         context.emit_stat_update();
 
         // Phase 3: Démarrer l'indexation du contenu automatiquement
-        println!("[INFO] Démarrage de l'indexation du contenu automatique");
-        index_content_async(window);
+        tracing::info!("Démarrage de l'indexation du contenu automatique");
+        let service_repo = context.service_repository.clone();
+        index_content_async(window, service_repo);
     });
 }

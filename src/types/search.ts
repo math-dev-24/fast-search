@@ -35,4 +35,5 @@ export interface SearchQuery {
     offset: number;
     search_in_content: boolean;
     path_pattern: string | null;
+    cursor?: number | null;
 }

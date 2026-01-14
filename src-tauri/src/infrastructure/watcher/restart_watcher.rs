@@ -6,7 +6,7 @@ pub fn restart_file_watcher_with_new_paths_only(
     state: &tauri::State<'_, AppState>
 ) {
     if !new_paths.is_empty() {
-        println!("Restarting file watcher with {} paths", new_paths.len());
+        tracing::info!("Restarting file watcher with {} paths", new_paths.len());
 
         let watcher_manager = state.file_watcher_manager.clone();
         let window_clone = window.clone();
@@ -14,7 +14,7 @@ pub fn restart_file_watcher_with_new_paths_only(
         tauri::async_runtime::spawn(async move {
             match watcher_manager.restart_watching(window_clone.clone(), new_paths.clone()) {
                 Ok(()) => {
-                    println!("✅ File watcher restarted with {} paths", new_paths.len());
+                    tracing::info!("File watcher restarted with {} paths", new_paths.len());
                     use crate::application::events::emitters::{emit_event, EVENT_WATCHER_STARTED};
                     emit_event(&window_clone, EVENT_WATCHER_STARTED, serde_json::json!({
                         "message": format!("Watcher restarted with {} paths", new_paths.len()),
@@ -23,7 +23,7 @@ pub fn restart_file_watcher_with_new_paths_only(
                     }));
                 },
                 Err(e) => {
-                    eprintln!("❌ Failed to restart file watcher with paths: {}", e);
+                    tracing::error!("Failed to restart file watcher with paths: {}", e);
                     use crate::application::events::emitters::{emit_error_event, EVENT_WATCHER_ERROR};
                     emit_error_event(&window_clone, EVENT_WATCHER_ERROR,
                                      format!("Failed to restart watcher: {}", e));
@@ -31,6 +31,6 @@ pub fn restart_file_watcher_with_new_paths_only(
             }
         });
     } else {
-        println!("⚠️ No paths provided to restart file watcher");
+        tracing::warn!("No paths provided to restart file watcher");
     }
 }

@@ -14,7 +14,7 @@ pub fn collect_files_and_folders<F>(base_path: &Path, progress_callback: F) -> V
 where F: Fn(usize, &str) + Send + Sync + Clone
 {
     if !base_path.exists() || !base_path.is_dir() {
-        eprintln!("[ERROR] Le chemin n'existe pas ou n'est pas un dossier: {}", base_path.display());
+        tracing::error!("Le chemin n'existe pas ou n'est pas un dossier: {}", base_path.display());
         return Vec::new();
     }
 
@@ -25,7 +25,7 @@ where F: Fn(usize, &str) + Send + Sync + Clone
         .filter_map(|e| match e {
             Ok(entry) => Some(entry),
             Err(err) => {
-                eprintln!("[WARNING] Erreur d'accès ignorée: {}", err);
+                tracing::warn!("Erreur d'accès ignorée: {}", err);
                 None
             }
         })
@@ -34,7 +34,7 @@ where F: Fn(usize, &str) + Send + Sync + Clone
 
     let total = entries.len();
 
-    println!("[INFO] Base path: {}. Trouvé {} entrées", base_path.display(), total);
+    tracing::info!("Base path: {}. Trouvé {} entrées", base_path.display(), total);
 
     if total == 0 {
         progress_callback(0, "Aucun fichier trouvé dans ce répertoire");
@@ -78,14 +78,14 @@ fn process_entry_safe(entry: &walkdir::DirEntry) -> Option<File> {
 
     // Vérification de sécurité basique
     if path.to_string_lossy().len() > 4096 {
-        eprintln!("[WARNING] Chemin trop long ignoré: {}", path.display());
+        tracing::warn!("Chemin trop long ignoré: {}", path.display());
         return None;
     }
 
     let file_name = match path.file_name()?.to_str() {
         Some(name) => name,
         None => {
-            eprintln!("[WARNING] Nom de fichier invalide ignoré: {}", path.display());
+            tracing::warn!("Nom de fichier invalide ignoré: {}", path.display());
             return None;
         }
     };
@@ -94,7 +94,7 @@ fn process_entry_safe(entry: &walkdir::DirEntry) -> Option<File> {
     let metadata = match entry.metadata() {
         Ok(meta) => meta,
         Err(e) => {
-            eprintln!("[WARNING] Impossible de lire les métadonnées pour {}: {}", path.display(), e);
+            tracing::warn!("Impossible de lire les métadonnées pour {}: {}", path.display(), e);
             return None;
         }
     };
@@ -167,7 +167,7 @@ fn process_entry_safe(entry: &walkdir::DirEntry) -> Option<File> {
         // Vérification de la taille du fichier
         let file_size = metadata.len();
         if file_size > MAX_FILE_SIZE {
-            eprintln!("[WARNING] Fichier trop volumineux ignoré: {} ({} bytes)", path.display(), file_size);
+            tracing::warn!("Fichier trop volumineux ignoré: {} ({} bytes)", path.display(), file_size);
             return None;
         }
 

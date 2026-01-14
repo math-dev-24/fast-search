@@ -18,14 +18,16 @@ Tu DOIS retourner UNIQUEMENT un objet JSON valide sans caractères d'échappemen
     "limit": 1000,
     "offset": 0,
     "search_in_content": false,
-    "path_pattern": null
+    "path_pattern": null,
+    "cursor": null
 }
 
 RÈGLES IMPORTANTES :
 - Réponds UNIQUEMENT avec le JSON valide, aucun texte explicatif avant ou après
 - N'utilise PAS de caractères d'échappement (pas de \", \{, \}, etc.)
-- Utilise les valeurs par défaut : limit=1000, offset=0, search_in_content=false, path_pattern=null, is_dir=false
+- Utilise les valeurs par défaut : limit=1000, offset=0, search_in_content=false, path_pattern=null, cursor=null, is_dir=false
 - Le champ "search_in_content" doit être présent AU NIVEAU RACINE ET dans les filters
+- Le champ "cursor" est optionnel et utilisé pour la pagination cursor-based (mettre null par défaut)
 - Pour les tailles : 1KB=1024, 1MB=1048576, 1GB=1073741824 bytes (MAX: 4294967295)
 - Pour les dates : utilise des timestamps en millisecondes (temps Unix * 1000)
 - date_mode : "Create" pour création, "Modify" pour modification
@@ -51,7 +53,8 @@ Requête: "PDF créés cette semaine"
     "limit": 1000,
     "offset": 0,
     "search_in_content": false,
-    "path_pattern": null
+    "path_pattern": null,
+    "cursor": null
 }
 
 Requête: "Images de plus de 5MB dans le dossier Photos"
@@ -71,7 +74,8 @@ Requête: "Images de plus de 5MB dans le dossier Photos"
     "limit": 1000,
     "offset": 0,
     "search_in_content": false,
-    "path_pattern": null
+    "path_pattern": null,
+    "cursor": null
 }
 
 EXTENSIONS COURANTES PAR TYPE :

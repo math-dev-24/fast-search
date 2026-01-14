@@ -7,7 +7,7 @@ pub async fn start_file_watcher(
     paths: Vec<String>,
     state: tauri::State<'_, AppState>
 ) -> Result<String, String> {
-    println!("Starting file watcher for paths: {:?}", paths);
+    tracing::info!("Starting file watcher for paths: {:?}", paths);
 
     if paths.is_empty() {
         return Err("Aucun chemin spécifié".to_string());
@@ -27,7 +27,7 @@ pub async fn start_file_watcher(
 pub async fn stop_file_watcher(
     state: tauri::State<'_, AppState>
 ) -> Result<String, String> {
-    println!("Stopping file watcher");
+    tracing::info!("Stopping file watcher");
 
     match state.file_watcher_manager.stop_watching() {
         Ok(()) => {
@@ -45,7 +45,7 @@ pub async fn restart_file_watcher(
     new_paths: Vec<String>,
     state: tauri::State<'_, AppState>
 ) -> Result<String, String> {
-    println!("Restarting file watcher with new paths: {:?}", new_paths);
+    tracing::info!("Restarting file watcher with new paths: {:?}", new_paths);
 
     if new_paths.is_empty() {
         return Err("Aucun chemin spécifié".to_string());

@@ -8,7 +8,7 @@ pub fn start_file_watcher_on_startup(app: &tauri::App, window: tauri::WebviewWin
             match service_repo.get_all_paths() {
                 Ok(paths) => {
                     if !paths.is_empty() {
-                        println!("Starting file watcher on startup with {} paths", paths.len());
+                        tracing::info!("Starting file watcher on startup with {} paths", paths.len());
 
                         let app_state = app.state::<AppState>();
                         let watcher_manager = app_state.file_watcher_manager.clone();
@@ -16,26 +16,26 @@ pub fn start_file_watcher_on_startup(app: &tauri::App, window: tauri::WebviewWin
                         tauri::async_runtime::spawn(async move {
                             match watcher_manager.start_watching(window.clone(), paths.clone()) {
                                 Ok(()) => {
-                                    println!("✅ File watcher started successfully on startup for {} paths", paths.len());
+                                    tracing::info!("File watcher started successfully on startup for {} paths", paths.len());
                                 },
                                 Err(e) => {
-                                    eprintln!("❌ Failed to start file watcher on startup: {}", e);
+                                    tracing::error!("Failed to start file watcher on startup: {}", e);
                                     use crate::application::events::emitters::{emit_error_event, EVENT_WATCHER_ERROR};
                                     emit_error_event(&window, EVENT_WATCHER_ERROR, format!("Auto-start failed: {}", e));
                                 }
                             }
                         });
                     } else {
-                        println!("ℹ️ No paths configured, file watcher not started");
+                        tracing::info!("No paths configured, file watcher not started");
                     }
                 },
                 Err(e) => {
-                    eprintln!("❌ Failed to get paths for file watcher: {}", e);
+                    tracing::error!("Failed to get paths for file watcher: {}", e);
                 }
             }
         },
         Err(e) => {
-            eprintln!("❌ Failed to get service repository for file watcher: {}", e);
+            tracing::error!("Failed to get service repository for file watcher: {}", e);
         }
     }
 }

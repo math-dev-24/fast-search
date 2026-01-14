@@ -111,7 +111,7 @@ impl AsyncFileWatcher {
         // Émettre l'événement de démarrage
         emit_started_event(&self.window, EVENT_WATCHER_STARTED);
 
-        println!("File watcher started for {} paths: {:?}", paths.len(), paths);
+        tracing::info!("File watcher started for {} paths: {:?}", paths.len(), paths);
         Ok(())
     }
 
@@ -138,7 +138,7 @@ impl AsyncFileWatcher {
             "timestamp": chrono::Utc::now().to_rfc3339()
         }));
 
-        println!("File watcher stopped");
+        tracing::info!("File watcher stopped");
         Ok(())
     }
 
@@ -206,7 +206,8 @@ impl FileWatcherManager {
     }
 
     pub fn start_watching(&self, window: WebviewWindow, paths: Vec<String>) -> AppResult<()> {
-        let mut watcher_guard = self.watcher.lock().unwrap();
+        let mut watcher_guard = self.watcher.lock()
+            .map_err(|e| AppError::Internal(format!("Failed to lock watcher: {}", e)))?;
 
         match watcher_guard.as_mut() {
             Some(existing_watcher) => {
@@ -224,7 +225,8 @@ impl FileWatcherManager {
     }
 
     pub fn stop_watching(&self) -> AppResult<()> {
-        let mut watcher_guard = self.watcher.lock().unwrap();
+        let mut watcher_guard = self.watcher.lock()
+            .map_err(|e| AppError::Internal(format!("Failed to lock watcher: {}", e)))?;
 
         if let Some(watcher) = watcher_guard.as_mut() {
             watcher.stop_watching()?;
@@ -239,21 +241,31 @@ impl FileWatcherManager {
     }
 
     pub fn get_status(&self) -> serde_json::Value {
-        let watcher_guard = self.watcher.lock().unwrap();
-
-        match watcher_guard.as_ref() {
-            Some(watcher) => {
-                serde_json::json!({
-                    "is_watching": watcher.is_watching(),
-                    "watched_paths": watcher.get_watched_paths(),
-                    "path_count": watcher.get_watched_paths().len()
-                })
+        match self.watcher.lock() {
+            Ok(watcher_guard) => {
+                match watcher_guard.as_ref() {
+                    Some(watcher) => {
+                        serde_json::json!({
+                            "is_watching": watcher.is_watching(),
+                            "watched_paths": watcher.get_watched_paths(),
+                            "path_count": watcher.get_watched_paths().len()
+                        })
+                    },
+                    None => {
+                        serde_json::json!({
+                            "is_watching": false,
+                            "watched_paths": [],
+                            "path_count": 0
+                        })
+                    }
+                }
             },
-            None => {
+            Err(_) => {
                 serde_json::json!({
                     "is_watching": false,
                     "watched_paths": [],
-                    "path_count": 0
+                    "path_count": 0,
+                    "error": "Failed to get watcher status"
                 })
             }
         }

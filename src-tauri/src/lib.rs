@@ -5,23 +5,43 @@ mod infrastructure;
 mod shared;
 
 use commands::*;
-use crate::application::factories::service_factory::get_service_repository;
 use crate::infrastructure::watcher::init_watcher::start_file_watcher_on_startup;
 use crate::shared::config::AppState;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let service_repository = get_service_repository().expect("Failed to initialize service repository");
+    // Initialiser le logging structuré
+    let env_filter = std::env::var("RUST_LOG")
+        .unwrap_or_else(|_| "fast_search=info,tauri=warn".to_string());
+    
+    tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .with_target(false)
+        .with_thread_ids(false)
+        .with_file(false)
+        .with_line_number(true)
+        .init();
 
-    service_repository.init().expect("Failed to initialize database");
+    tracing::info!("🚀 Starting Fast Search application");
+
+    let app_state = match AppState::new() {
+        Ok(state) => {
+            tracing::info!("✅ Application state initialized successfully");
+            state
+        },
+        Err(e) => {
+            tracing::error!("❌ Failed to initialize application state: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let builder = tauri::Builder::default();
     let builder = builder.plugin(tauri_plugin_opener::init());
     let builder = builder.plugin(tauri_plugin_dialog::init());
     
     builder
-        .manage(AppState::new())
+        .manage(app_state)
         .invoke_handler(tauri::generate_handler![
         // System
         system_commands::get_stat,
@@ -52,10 +72,17 @@ pub fn run() {
         ai_commands::ai_list_models
     ])
     .setup(|app| {
-        let window = app.get_webview_window("main").unwrap();
-        start_file_watcher_on_startup(app, window);
+        if let Some(window) = app.get_webview_window("main") {
+            tracing::info!("📁 Starting file watcher on startup");
+            start_file_watcher_on_startup(app, window);
+        } else {
+            tracing::warn!("⚠️ Main window not found during setup");
+        }
         Ok(())
     })
     .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .unwrap_or_else(|e| {
+        tracing::error!("❌ Error while running tauri application: {}", e);
+        std::process::exit(1);
+    });
 }

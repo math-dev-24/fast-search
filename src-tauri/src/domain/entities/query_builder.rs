@@ -38,7 +38,7 @@ impl QueryBuilder {
         self.fts_query = Some(query);
     }
 
-    pub fn build(self, sort_by: &str, sort_order: &str, limit: u32, offset: u32) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
+    pub fn build(self, sort_by: &str, sort_order: &str, limit: u32, offset: u32, cursor: Option<i64>) -> (String, Vec<Box<dyn rusqlite::ToSql>>) {
         let mut all_params = Vec::new();
 
         let cte_prefix = if !self.cte_conditions.is_empty() {
@@ -49,32 +49,54 @@ impl QueryBuilder {
             String::new()
         };
 
-        let where_clause = if self.conditions.is_empty() {
+        let mut where_clause = if self.conditions.is_empty() {
             "1=1".to_string()
         } else {
             self.conditions.join(" AND ")
         };
 
+        // 2. FTS query parameter (for MATCH clause in WHERE)
+        // Must come after CTE params but before cursor and regular WHERE params
         if let Some(fts_query) = self.fts_query {
-            all_params.insert(0, Box::new(fts_query) as Box<dyn rusqlite::ToSql>);
+            all_params.push(Box::new(fts_query) as Box<dyn rusqlite::ToSql>);
         }
 
+        // 3. Cursor parameter (for files.id > ? in WHERE clause)
+        // Must come after FTS query but before regular WHERE params
+        if let Some(cursor_id) = cursor {
+            let cursor_condition = if where_clause == "1=1" {
+                format!("files.id > ?")
+            } else {
+                format!("{} AND files.id > ?", where_clause)
+            };
+            where_clause = cursor_condition;
+            all_params.push(Box::new(cursor_id) as Box<dyn rusqlite::ToSql>);
+        }
+
+        // 4. Regular WHERE condition parameters (for other WHERE conditions)
         all_params.extend(self.params);
+
+        // Utiliser cursor-based pagination si cursor est fourni, sinon fallback sur OFFSET
+        let pagination = if cursor.is_some() {
+            format!("LIMIT {}", limit)
+        } else {
+            format!("LIMIT {} OFFSET {}", limit, offset)
+        };
 
         let sql = if self.has_fts {
             format!(
                 "{}SELECT files.* FROM files \
                  JOIN fts_content ON files.id = fts_content.file_id \
                  WHERE fts_content.content MATCH ? AND {} \
-                 ORDER BY bm25(fts_content) ASC, files.{} {} LIMIT {} OFFSET {}",
-                cte_prefix, where_clause, sort_by, sort_order, limit, offset
+                 ORDER BY bm25(fts_content) ASC, files.{} {} {}",
+                cte_prefix, where_clause, sort_by, sort_order, pagination
             )
         } else {
             format!(
                 "{}SELECT * FROM files \
                  WHERE {} \
-                 ORDER BY {} {} LIMIT {} OFFSET {}",
-                cte_prefix, where_clause, sort_by, sort_order, limit, offset
+                 ORDER BY {} {} {}",
+                cte_prefix, where_clause, sort_by, sort_order, pagination
             )
         };
 

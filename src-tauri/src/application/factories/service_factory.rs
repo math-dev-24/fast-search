@@ -1,18 +1,25 @@
 use crate::infrastructure::repository::sqlite::Db;
 use crate::domain::ports::repository::FileRepository;
 use crate::domain::services::file_service::FileService;
-use std::env;
 use std::fs;
 
 fn get_db_path() -> Result<String, String> {
-    let data_dir = env::var("APPDATA")
-        .map(|appdata| format!("{}\\fast-search", appdata))
-        .or_else(|_| env::current_dir()
-            .map(|dir| dir.join("data").to_string_lossy().to_string())
-            .map_err(|e| e.to_string()))?;
+    // Utiliser dirs pour la compatibilité cross-platform
+    let data_dir = dirs::data_dir()
+        .map(|dir| dir.join("fast-search"))
+        .or_else(|| {
+            // Fallback vers le répertoire courant si dirs::data_dir() échoue
+            std::env::current_dir()
+                .ok()
+                .map(|dir| dir.join("data"))
+        })
+        .ok_or_else(|| "Failed to determine data directory".to_string())?;
 
-    fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
-    Ok(format!("{}\\fast-search-lite-db.db", data_dir))
+    fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("Failed to create data directory: {}", e))?;
+    
+    let db_path = data_dir.join("fast-search-lite-db.db");
+    Ok(db_path.to_string_lossy().to_string())
 }
 
 
