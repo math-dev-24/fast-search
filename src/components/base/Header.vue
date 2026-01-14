@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
 import { NSpace, NButton, NIcon, NPopover } from 'naive-ui';
 import { RouterLink } from 'vue-router';
 import Setting from '../Setting.vue';
@@ -8,9 +7,14 @@ import Indicator from '../sync/Indicator.vue';
 import { useSync } from '../../composables/useSync.ts';
 import ColorMode from '../ColorMode.vue';
 import { darkTheme } from 'naive-ui';
+import { HomeOutline, BarChartOutline } from '@vicons/ionicons5';
 
-const router = useRouter();
-const routes = router.getRoutes();
+
+// Routes explicites avec labels et icônes
+const navigationRoutes = [
+    { path: '/', name: 'Accueil', icon: HomeOutline },
+    { path: '/statistique', name: 'Statistiques', icon: BarChartOutline }
+];
 
 defineProps<{
     theme: typeof darkTheme | null
@@ -42,13 +46,18 @@ const emit = defineEmits<{
                 Fast Search
             </h1>
             <NSpace align="center" :size="14">
-                <RouterLink v-for="route in routes" :key="route.path" :to="route.path" custom
+                <RouterLink v-for="route in navigationRoutes" :key="route.path" :to="route.path" custom
                     v-slot="{ navigate, isActive }">
                     <NButton 
                         :class="{ 'active': isActive }" 
                         @click="navigate"
                         :type="isActive ? 'primary' : 'default'"
                     >
+                        <template #icon>
+                            <NIcon size="16">
+                                <component :is="route.icon" />
+                            </NIcon>
+                        </template>
                         {{ route.name }}
                     </NButton>
                 </RouterLink>

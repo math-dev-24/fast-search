@@ -3,7 +3,7 @@ import { NBadge, NCollapse, NCollapseItem, NGi, NGrid, NTabs, NTabPane, NButton,
 import type { File } from "../../types";
 import Card from "./CardFolder.vue";
 import Line from "./LineFolder.vue";
-import { ref } from "vue";
+import { ref, Transition } from "vue";
 
 defineProps<{
   folders: File[]
@@ -19,7 +19,8 @@ const maxFoldersLine = ref<number>(15);
 </script>
 
 <template>
-  <NCard v-if="folders.length > 0">
+  <Transition name="fade-expand">
+    <NCard v-if="folders.length > 0" key="folders-card">
     <NCollapse class="mb-6">
       <NCollapseItem name="folders">
         <template #header>
@@ -91,4 +92,25 @@ const maxFoldersLine = ref<number>(15);
       </NCollapseItem>
     </NCollapse>
   </NCard>
+  </Transition>
 </template>
+
+<style scoped>
+.fade-expand-enter-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fade-expand-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fade-expand-enter-from {
+  opacity: 0;
+  transform: translateY(15px) scale(0.96);
+}
+
+.fade-expand-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.96);
+}
+</style>

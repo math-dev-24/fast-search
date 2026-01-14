@@ -3,7 +3,7 @@ import { NGi, NGrid, NTabs, NTabPane, NButton, NTable, NCard } from "naive-ui";
 import type { File } from "../../types";
 import Card from "./CardFile.vue";
 import Line from "./LineFile.vue";
-import { ref } from "vue";
+import { ref, Transition } from "vue";
 
 defineProps<{
   files: File[]
@@ -21,7 +21,8 @@ const maxFilesLine = ref<number>(15);
 </script>
 
 <template>
-  <NCard v-if="files.length > 0" title="📄 Fichiers">
+  <Transition name="fade-expand">
+    <NCard v-if="files.length > 0" title="📄 Fichiers" key="files-card">
         <NTabs animated type="segment">
           <NTabPane name="line" tab="Tableau">
             <NTable :single-line="false" class="w-full">
@@ -83,5 +84,26 @@ const maxFilesLine = ref<number>(15);
             </div>
           </NTabPane>
         </NTabs>
-  </NCard>
+    </NCard>
+  </Transition>
 </template>
+
+<style scoped>
+.fade-expand-enter-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fade-expand-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fade-expand-enter-from {
+  opacity: 0;
+  transform: translateY(15px) scale(0.96);
+}
+
+.fade-expand-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.96);
+}
+</style>

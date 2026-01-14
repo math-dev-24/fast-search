@@ -15,7 +15,7 @@ export const useSettingStore = defineStore("settingStore", {
         status: "Ok",
         inLoading: false,
         paths: [],
-        ai_path: "http://192.168.108.157:1234"
+        ai_path: "http://localhost:1234"
     }),
 
     actions: {

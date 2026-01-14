@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NCollapse, NCollapseItem, NIcon, type SelectOption } from 'naive-ui';
+import { NCollapse, NCollapseItem, NIcon, NText, type SelectOption } from 'naive-ui';
 import { OptionsOutline } from '@vicons/ionicons5';
 
 const emit = defineEmits<{
@@ -10,6 +10,7 @@ const emit = defineEmits<{
 const props = defineProps<{
   typeFiles: SelectOption[];
   folders: SelectOption[];
+  loadingFilters?: boolean;
 }>();
 </script>
 
@@ -22,17 +23,35 @@ const props = defineProps<{
         </NIcon>
       </template>
 
-      <div class="flex flex-col">
-        <!-- File Types & Folders Row -->
-        <div class="filter-row grid grid-cols-2 gap-1 my-0.5">
-          <FileTypesFilter :type-files="props.typeFiles" @handle-search="() => emit('handleSearch')" />
-          <FoldersFilter :folders="props.folders" @handle-search="() => emit('handleSearch')" />
+      <div class="flex flex-col space-y-4">
+        <!-- Section: Filtres par type et emplacement -->
+        <div>
+          <NText class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
+            Filtres par type et emplacement
+          </NText>
+          <div class="filter-row grid grid-cols-2 gap-1 my-0.5">
+            <FileTypesFilter 
+              :type-files="props.typeFiles" 
+              :loading-filters="props.loadingFilters"
+              @handle-search="() => emit('handleSearch')" 
+            />
+            <FoldersFilter 
+              :folders="props.folders" 
+              :loading-filters="props.loadingFilters"
+              @handle-search="() => emit('handleSearch')" 
+            />
+          </div>
         </div>
 
-        <!-- Date & Size Row -->
-        <div class="filter-row">
-          <DateFilter @handle-search="() => emit('handleSearch')" />
-          <SizeLimitFilter @handle-search="() => emit('handleSearch')" />
+        <!-- Section: Filtres par date et taille -->
+        <div>
+          <NText class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">
+            Filtres par date et taille
+          </NText>
+          <div class="filter-row grid grid-cols-2 gap-1">
+            <DateFilter @handle-search="() => emit('handleSearch')" />
+            <SizeLimitFilter @handle-search="() => emit('handleSearch')" />
+          </div>
         </div>
       </div>
 
@@ -40,7 +59,10 @@ const props = defineProps<{
       <SearchSwitches @handle-search="() => emit('handleSearch')" />
 
       <!-- Action Buttons -->
-      <ActionsBar @reset="() => emit('reset')" />
+      <ActionsBar 
+        @reset="() => emit('reset')" 
+        @search="() => emit('handleSearch')"
+      />
     </NCollapseItem>
   </NCollapse>
 </template>

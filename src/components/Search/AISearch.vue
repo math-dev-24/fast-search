@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import {computed, onMounted} from 'vue';
-import {NAlert, NButton, NIcon, NInput, NSelect, NSpace, NTag} from 'naive-ui';
+import {NAlert, NButton, NIcon, NInput, NSelect, NSpace, NTag, NText} from 'naive-ui';
 import {
   CheckmarkCircleOutline,
   CloseCircleOutline,
@@ -61,10 +61,29 @@ const connectionStatusText = computed(() => {
   }
 });
 
+const getButtonLabel = () => {
+  if (aiStore.inLoading || props.inLoading) {
+    return 'Recherche...';
+  }
+  if (aiStore.connectionStatus !== 'connected') {
+    return 'En attente de connexion IA';
+  }
+  if (!aiStore.selectedModel) {
+    return 'Sélectionner un modèle';
+  }
+  if (!aiStore.naturalSearch?.trim()) {
+    return 'Entrer une requête';
+  }
+  return 'Rechercher';
+};
+
 const handleSearch = async () => {
   const query: SearchQuery | undefined = await aiStore.aiSearch()
   console.info(query);
-  if (!query) return
+  if (!query) {
+    // Afficher un message si la recherche IA n'a pas retourné de query valide
+    return;
+  }
   emit('search', query)
 }
 
@@ -120,7 +139,12 @@ onMounted(() => {
           </div>
         </div>
       </div>
-      <span class="text-xs italic">{{aiStore.apiUrl}}</span>
+      <NText depth="3" class="text-xs italic">
+        {{aiStore.apiUrl}}
+        <NButton text size="tiny" @click="() => {}" class="ml-1">
+          (Configurer)
+        </NButton>
+      </NText>
     </div>
 
     <div class="search-input-wrapper mb-6">
@@ -165,7 +189,7 @@ onMounted(() => {
             <SearchOutline/>
           </NIcon>
         </template>
-        {{ aiStore.inLoading ? 'Recherche...' : 'Rechercher' }}
+        {{ getButtonLabel() }}
       </NButton>
     </NSpace>
 
@@ -174,7 +198,20 @@ onMounted(() => {
           :show-icon="true"
           type="warning"
       >
-        Service IA non disponible. Vérifiez votre connexion.
+        <template #header>
+          Service IA non disponible
+        </template>
+        <div class="space-y-2">
+          <NText>
+            Le service d'intelligence artificielle n'est pas accessible. Pour utiliser la recherche IA :
+          </NText>
+          <ul class="list-disc list-inside space-y-1 ml-2">
+            <li>Assurez-vous que LM Studio est lancé et qu'un serveur est actif</li>
+            <li>Vérifiez que l'URL du service est correcte dans les paramètres</li>
+            <li>L'URL par défaut est <code class="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">http://localhost:1234</code></li>
+            <li>Vous pouvez modifier l'URL dans les Réglages (icône ⚙️ dans le header)</li>
+          </ul>
+        </div>
       </NAlert>
     </div>
 

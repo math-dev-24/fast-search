@@ -112,8 +112,9 @@ const openFile = () => {
         v-model:show="show"
         preset="card"
         class="w-[90vw] max-w-4xl max-h-[90vh] overflow-y-auto"
-        :mask-closable="false"
+        :mask-closable="true"
         :closable="true"
+        :auto-focus="false"
     >
         <div v-if="file" class="space-y-6">
             <div class="flex items-center justify-between p-4 bg-gray-700 rounded-lg">

@@ -68,10 +68,15 @@ export const useSearchStore = defineStore('search', {
             this.in_loading = true;
             this.is_loaded = false;
             try {
+                // Synchroniser search_in_content entre query et filters
+                this.query.search_in_content = this.query.filters.search_in_content;
                 this.result = await invoke('search_files', {query: this.query});
                 this.is_loaded = true;
             } catch (error) {
-                console.error(error);
+                console.error('Erreur lors de la recherche:', error);
+                this.result = [];
+                this.is_loaded = false;
+                throw error; // Propager l'erreur pour affichage dans l'UI
             } finally {
                 this.in_loading = false;
             }
@@ -91,13 +96,15 @@ export const useSearchStore = defineStore('search', {
                 },
                 sort_by: SortBy.NAME,
                 sort_order: SortOrder.ASC,
-                limit: 100,
+                limit: 1000, // Cohérence avec l'état initial
                 offset: 0,
                 search_in_content: false,
                 path_pattern: null,
                 cursor: null
             };
             this.result = [];
+            this.search = '';
+            this.is_loaded = false;
         },
 
         async openFile(path: string) {

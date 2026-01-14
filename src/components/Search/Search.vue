@@ -21,9 +21,9 @@
           <template #suffix>
             <NButton
                 :disabled="searchStore.in_loading"
+                :type="searchStore.auto_submit ? 'default' : 'primary'"
                 class="search-btn"
                 size="small"
-                type="primary"
                 @click="emit('search')"
             >
               <template #icon>
@@ -31,6 +31,7 @@
                   <Search/>
                 </NIcon>
               </template>
+              <span v-if="!searchStore.auto_submit" class="ml-1">Rechercher</span>
             </NButton>
           </template>
         </NInput>
@@ -41,6 +42,7 @@
     <Options
       :type-files="typeFiles"
       :folders="folders"
+      :loading-filters="loadingFilters"
       @handle-search="handleSearch"
       @reset="emit('reset')"
     />
@@ -66,7 +68,7 @@ import Options from '../Options';
 
 const typeFiles = ref<SelectOption[]>([]);
 const folders = ref<SelectOption[]>([]);
-
+const loadingFilters = ref<boolean>(false); // État de chargement séparé pour les filtres
 
 const searchStore = useSearchStore();
 
@@ -81,7 +83,7 @@ onMounted(async () => {
 })
 
 const syncTypeFiles = async () => {
-  searchStore.in_loading = true;
+  loadingFilters.value = true;
   try {
     const result = await invoke<string[]>('get_all_types');
     typeFiles.value = result.map(type => ({
@@ -89,14 +91,14 @@ const syncTypeFiles = async () => {
       value: type
     }));
   } catch (error) {
-    console.error(error);
+    console.error('Erreur lors du chargement des types de fichiers:', error);
   } finally {
-    searchStore.in_loading = false;
+    loadingFilters.value = false;
   }
 }
 
 const syncFolders = async () => {
-  searchStore.in_loading = true;
+  loadingFilters.value = true;
   try {
     const result = await invoke<string[]>('get_all_folders');
     folders.value = result.map(folder => ({
@@ -104,9 +106,9 @@ const syncFolders = async () => {
       value: folder
     }));
   } catch (error) {
-    console.error(error);
+    console.error('Erreur lors du chargement des dossiers:', error);
   } finally {
-    searchStore.in_loading = false;
+    loadingFilters.value = false;
   }
 }
 

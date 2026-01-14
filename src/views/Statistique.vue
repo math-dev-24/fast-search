@@ -34,7 +34,7 @@ onMounted(async () => {
 
 onMounted(async () => {
     listeners.push(await listen('stat_updated', (event: any) => {
-        previousStat.value = stat.value;
+        previousStat.value = { ...stat.value };
         stat.value = event.payload;
     })); 
 });
@@ -63,6 +63,20 @@ const getStat = async () => {
 }
 
 const resetData = async () => {
+    // Utiliser window.$dialog si disponible, sinon créer une confirmation simple
+    const confirmed = window.confirm(
+        '⚠️ Attention : Cette action va supprimer toutes les données indexées.\n\n' +
+        'Cela inclut :\n' +
+        '- Tous les fichiers et dossiers indexés\n' +
+        '- Tout le contenu indexé\n' +
+        '- Toutes les statistiques\n\n' +
+        'Cette action est irréversible. Êtes-vous sûr de vouloir continuer ?'
+    );
+    
+    if (!confirmed) {
+        return;
+    }
+    
     try {
         if (message) {
             message.info('Réinitialisation des données en cours...');
@@ -105,7 +119,8 @@ const octetToAdapted = (value: number) => {
 </script>
 
 <template>
-    <NSpace v-if="stat" vertical class="py-14 px-2 container mx-auto">
+    <div class="statistique-view">
+        <NSpace v-if="stat" vertical class="py-14 px-2 container mx-auto">
         <NButtonGroup class="my-2">
             <NButton @click="getStat" :loading="inLoading" tertiary type="primary">
                 <template #icon>
@@ -115,13 +130,13 @@ const octetToAdapted = (value: number) => {
                 </template>
                 Actualiser
             </NButton>
-            <NButton @click="resetData" tertiary type="error">
+            <NButton @click="resetData" tertiary type="error" class="danger-button">
                 <template #icon>
                     <NIcon>
                         <Refresh /> 
                     </NIcon>
                 </template>
-                Réinitialiser (Suppression des données)
+                Réinitialiser les données
             </NButton>
         </NButtonGroup>
 
@@ -224,5 +239,6 @@ const octetToAdapted = (value: number) => {
                 <div class="text-sm text-gray-600">Contenu indexé</div>
             </NSpace>
         </NSpace>
-    </NSpace>
+        </NSpace>
+    </div>
 </template>

@@ -3,7 +3,10 @@ import { NCard, NIcon, NSelect, type SelectOption } from 'naive-ui';
 import { FolderOutline } from '@vicons/ionicons5';
 import { useSearchStore } from '../../shared';
 
-const props = defineProps<{ folders: SelectOption[] }>();
+const props = defineProps<{ 
+  folders: SelectOption[];
+  loadingFilters?: boolean;
+}>();
 const emit = defineEmits<{ (e: 'handleSearch'): void }>();
 
 const searchStore = useSearchStore();
@@ -21,8 +24,8 @@ const searchStore = useSearchStore();
     </template>
     <NSelect
       v-model:value="searchStore.query.filters.folders"
-      :disabled="searchStore.in_loading"
-      :loading="searchStore.in_loading"
+      :disabled="searchStore.in_loading || props.loadingFilters"
+      :loading="props.loadingFilters"
       :options="props.folders"
       filterable
       max-tag-count="responsive"
