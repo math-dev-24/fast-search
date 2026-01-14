@@ -74,23 +74,6 @@ impl<T: FileRepository> FileService<T> {
         self.repository.update_file_index_status(file, content_hash, is_indexable)
     }
 
-    pub fn get_file_by_path(&self, path: &str) -> AppResult<File> {
-        if path.trim().is_empty() {
-            return Err(AppError::Validation("Path cannot be empty".to_string()));
-        }
-
-        let query = SearchQuery {
-            path_pattern: Some(path.to_string()),
-            limit: 1,
-            ..Default::default()
-        };
-
-        let files = self.repository.search(&query)?;
-
-        files.into_iter().next()
-            .ok_or_else(|| AppError::NotFound(format!("File not found: {}", path)))
-    }
-
     fn validate_search_query(query: &SearchQuery) -> AppResult<()> {
         if query.limit == 0 {
             return Err(AppError::Validation("Limit cannot be zero".to_string()));
