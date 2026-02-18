@@ -22,11 +22,20 @@ struct ScanContext {
 }
 
 impl ScanContext {
-    fn emit_stat_update(&self) {
-        if let Ok(repo) = self.service_repository.lock() {
-            if let Ok(stat) = repo.get_stat() {
-                emit_event(&self.window, EVENT_STAT_UPDATED, stat);
+    fn lock_repository(&self) -> std::sync::MutexGuard<'_, FileService<Db>> {
+        match self.service_repository.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                tracing::error!("Service repository lock was poisoned (scanner), recovering to avoid permanent failure");
+                poisoned.into_inner()
             }
+        }
+    }
+
+    fn emit_stat_update(&self) {
+        let repo = self.lock_repository();
+        if let Ok(stat) = repo.get_stat() {
+            emit_event(&self.window, EVENT_STAT_UPDATED, stat);
         }
     }
 
@@ -96,14 +105,8 @@ fn insert_files_in_chunks(files: &[File], context: &ScanContext) -> Result<usize
 
     for (chunk_index, file_chunk) in files.chunks(CHUNK_SIZE).enumerate() {
         let insert_result = {
-            match context.service_repository.lock() {
-                Ok(mut repo) => repo.insert(file_chunk.to_vec()),
-                Err(e) => {
-                    let error_msg = format!("Failed to lock repository: {}", e);
-                    context.emit_scan_error(error_msg.clone());
-                    return Err(error_msg);
-                }
-            }
+            let mut repo = context.lock_repository();
+            repo.insert(file_chunk.to_vec())
         };
 
         if let Err(e) = insert_result {

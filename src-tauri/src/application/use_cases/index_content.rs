@@ -3,6 +3,7 @@ use crate::application::events::emitters::{emit_event, emit_error_event, emit_st
                            EVENT_INDEX_ERROR, EVENT_STAT_UPDATED};
 use tauri::WebviewWindow;
 use std::sync::{Arc, Mutex};
+use std::panic;
 use crate::domain::entities::scan::{IndexProgress, IndexFinished};
 use crate::domain::entities::file::File;
 use crate::domain::services::content_indexer_service::ContentIndexerService;
@@ -63,39 +64,64 @@ fn can_index_file(file: &File) -> bool {
     content_indexer.can_index_file(file)
 }
 
+fn lock_repository(service_repository: &Arc<Mutex<FileService<Db>>>) -> std::sync::MutexGuard<'_, FileService<Db>> {
+    match service_repository.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            tracing::error!("Service repository lock was poisoned (index_content), recovering to avoid permanent failure");
+            poisoned.into_inner()
+        }
+    }
+}
+
 async fn process_single_file(
     file: File,
     service_repository: Arc<Mutex<FileService<Db>>>,
 ) -> Result<(), String> {
     let file_path = file.path.display().to_string();
-    
-    let mut repo = service_repository.lock()
-        .map_err(|e| format!("Erreur d'accès au repository pour {}: {}", file_path, e))?;
 
     if !can_index_file(&file) {
-        // Marquer comme non indexable mais sans erreur
+        let mut repo = lock_repository(&service_repository);
         repo.update_file_index_status(&file, String::new(), false)
             .map_err(|e| format!("Erreur mise à jour fichier non indexable {}: {}", file_path, e))?;
-        return Ok(()); // Pas d'erreur, juste non indexable
+        return Ok(());
     }
 
-    let mut content_indexer = ContentIndexerService::new();
+    let file_clone = file.clone();
+    let read_result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        let mut content_indexer = ContentIndexerService::new();
+        content_indexer.index_file_content(&file_clone)
+    }));
 
-    let text_content = match content_indexer.index_file_content(&file) {
-        Ok(content) => {
+    let text_content = match read_result {
+        Ok(Ok(content)) => {
             tracing::debug!("Indexation réussie: {} ({} chars)", file_path, content.len());
             content
         },
-        Err(e) => {
+        Ok(Err(e)) => {
             tracing::warn!("Échec indexation: {} - {}", file_path, e);
-            // En cas d'erreur de lecture, marquer le fichier comme non indexable
+            let mut repo = lock_repository(&service_repository);
             repo.update_file_index_status(&file, String::new(), false)
                 .map_err(|update_err| format!("Erreur mise à jour après échec pour {}: {}", file_path, update_err))?;
-            return Ok(()); // Pas d'erreur critique, juste échec d'indexation
+            return Ok(());
+        },
+        Err(panic_info) => {
+            let panic_msg = if let Some(s) = panic_info.downcast_ref::<String>() {
+                s.clone()
+            } else if let Some(s) = panic_info.downcast_ref::<&str>() {
+                s.to_string()
+            } else {
+                "unknown panic".to_string()
+            };
+            tracing::error!("Panic lors de l'indexation de {}: {}", file_path, panic_msg);
+            let mut repo = lock_repository(&service_repository);
+            repo.update_file_index_status(&file, String::new(), false)
+                .map_err(|update_err| format!("Erreur mise à jour après panic pour {}: {}", file_path, update_err))?;
+            return Ok(());
         }
     };
 
-    // Marquer le fichier comme indexé avec succès
+    let mut repo = lock_repository(&service_repository);
     repo.update_file_index_status(&file, text_content, true)
         .map_err(|e| format!("Erreur mise à jour succès pour {}: {}", file_path, e))?;
 
@@ -112,13 +138,7 @@ pub fn index_content_async(
         emit_started_event(&window, EVENT_INDEX_STARTED);
 
         let uncontent_indexed_files = {
-            let repo = match service_repository.lock() {
-                Ok(repo) => repo,
-                Err(e) => {
-                    emit_error_event(&window, EVENT_INDEX_ERROR, format!("Erreur accès repository: {}", e));
-                    return;
-                }
-            };
+            let repo = lock_repository(&service_repository);
             match repo.get_uncontent_indexed_files() {
                 Ok(files) => files,
                 Err(e) => {
@@ -210,8 +230,8 @@ pub fn index_content_async(
                 }
             }
 
-            // IMPORTANT: Émettre les stats après chaque chunk
-            if let Ok(repo) = service_repository.lock() {
+            {
+                let repo = lock_repository(&service_repository);
                 if let Ok(stat) = repo.get_stat() {
                     tracing::debug!("Émission des stats après chunk {}: {} fichiers indexés", chunk_index + 1, stat.content_indexed_files);
                     emit_event(&window, EVENT_STAT_UPDATED, stat);
@@ -221,11 +241,8 @@ pub fn index_content_async(
 
 
         let final_stat = {
-            if let Ok(repo) = service_repository.lock() {
-                repo.get_stat().ok()
-            } else {
-                None
-            }
+            let repo = lock_repository(&service_repository);
+            repo.get_stat().ok()
         };
         
         if let Some(stat) = final_stat {

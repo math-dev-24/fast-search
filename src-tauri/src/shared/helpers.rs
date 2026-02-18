@@ -8,8 +8,13 @@ pub fn with_service_repository_readonly<F, T>(state: &tauri::State<'_, AppState>
 where
     F: FnOnce(&FileService<Db>) -> Result<T, AppError>,
 {
-    let repo = state.service_repository.lock()
-        .map_err(|e| format!("Failed to lock service repository: {}", e))?;
+    let repo = match state.service_repository.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            tracing::error!("Service repository lock was poisoned (readonly), recovering to avoid permanent failure");
+            poisoned.into_inner()
+        }
+    };
     f(&repo).map_err(|e| e.to_string())
 }
 
@@ -18,7 +23,12 @@ pub fn with_service_repository<F, T>(state: &tauri::State<'_, AppState>, f: F) -
 where
     F: FnOnce(&mut FileService<Db>) -> Result<T, AppError>,
 {
-    let mut repo = state.service_repository.lock()
-        .map_err(|e| format!("Failed to lock service repository: {}", e))?;
+    let mut repo = match state.service_repository.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            tracing::error!("Service repository lock was poisoned (readwrite), recovering to avoid permanent failure");
+            poisoned.into_inner()
+        }
+    };
     f(&mut repo).map_err(|e| e.to_string())
 }
