@@ -88,8 +88,7 @@ const handleSearch = async () => {
 }
 
 onMounted(() => {
-  aiStore.checkConnection()
-  aiStore.loadModels()
+  aiStore.init()
 })
 
 </script>
@@ -140,7 +139,7 @@ onMounted(() => {
         </div>
       </div>
       <NText depth="3" class="text-xs italic">
-        {{aiStore.apiUrl}}
+        {{ aiStore.selectedProvider }} | {{aiStore.apiUrl}}
         <NButton text size="tiny" @click="() => {}" class="ml-1">
           (Configurer)
         </NButton>
@@ -206,7 +205,8 @@ onMounted(() => {
             Le service d'intelligence artificielle n'est pas accessible. Pour utiliser la recherche IA :
           </NText>
           <ul class="list-disc list-inside space-y-1 ml-2">
-            <li>Assurez-vous que LM Studio est lancé et qu'un serveur est actif</li>
+            <li>Assurez-vous que votre provider IA est disponible (local ou cloud)</li>
+            <li>Si provider cloud: vérifiez qu'une clé API est enregistrée</li>
             <li>Vérifiez que l'URL du service est correcte dans les paramètres</li>
             <li>L'URL par défaut est <code class="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">http://localhost:1234</code></li>
             <li>Vous pouvez modifier l'URL dans les Réglages (icône ⚙️ dans le header)</li>

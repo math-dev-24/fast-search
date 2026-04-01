@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import {ref, onMounted, computed, watch} from 'vue';
+import {ref, computed, watch} from 'vue';
 import { 
   NButton, NModal, NCard, NDynamicInput, NIcon,
   NInput, NTabs, NTabPane, NAlert, NTag, NForm, NFormItem,
-  NText, useMessage
+  NText, NSelect, useMessage
 } from 'naive-ui';
 import { 
   Settings, FolderOutline, ServerOutline, 
@@ -13,6 +13,10 @@ import {
 import { useSettingStore, useAiStore } from "../shared";
 
 const showSetting = ref<boolean>(false);
+const activeTab = ref<'paths' | 'ai'>('paths');
+const settingsInitialized = ref<boolean>(false);
+const aiInitialized = ref<boolean>(false);
+const apiKeyInput = ref<string>('');
 const settingStore = useSettingStore();
 const aiStore = useAiStore();
 const message = useMessage();
@@ -39,19 +43,35 @@ const statusType = computed(() => {
     }
 });
 
-onMounted(() => {
-    settingStore.init();
-    aiStore.checkConnection();
-    aiStore.apiUrl = settingStore.ai_path;
-});
+const ensureSettingsInitialized = async () => {
+    if (settingsInitialized.value) return;
+    await settingStore.init();
+    aiStore.syncFromSettings();
+    if (settingStore.ai_default_model) {
+        aiStore.selectedModel = settingStore.ai_default_model;
+    }
+    settingsInitialized.value = true;
+};
+
+const ensureAiInitialized = async () => {
+    if (aiInitialized.value) return;
+    await aiStore.init();
+    aiInitialized.value = true;
+};
+
+const toggleSettingsModal = async () => {
+    if (!showSetting.value) {
+        await ensureSettingsInitialized();
+    }
+    showSetting.value = !showSetting.value;
+};
 
 const handleSaveAll = async () => {
     try {
-        if (aiStore.apiUrl !== settingStore.ai_path) {
-            aiStore.apiUrl = settingStore.ai_path;
-            await aiStore.init();
-        }
+        settingStore.ai_default_model = aiStore.selectedModel;
         await settingStore.savePaths();
+        settingStore.saveAiSettings();
+        await aiStore.init();
         message.success('Paramètres sauvegardés avec succès');
     } catch (error) {
         message.error('Erreur lors de la sauvegarde');
@@ -59,10 +79,83 @@ const handleSaveAll = async () => {
     }
 };
 
-watch(() => settingStore.ai_path, async (newPath) => {
-  aiStore.apiUrl = newPath;
-  await aiStore.init();
-})
+const providerOptions = [
+    { label: 'LM Studio (local)', value: 'lm_studio' },
+    { label: 'Ollama (local)', value: 'ollama' },
+    { label: 'ChatGPT / OpenAI', value: 'open_ai' },
+    { label: 'Claude / Anthropic', value: 'anthropic' },
+    { label: 'Mistral', value: 'mistral' },
+];
+
+const needsApiKey = computed(() => aiStore.requiresApiKey(settingStore.ai_provider));
+const isLocalProvider = computed(() =>
+    settingStore.ai_provider === 'lm_studio' || settingStore.ai_provider === 'ollama'
+);
+
+watch(
+    () => settingStore.ai_provider,
+    async (provider) => {
+        if (provider === 'lm_studio' && !settingStore.ai_endpoint.startsWith('http://localhost:1234')) {
+            settingStore.ai_endpoint = 'http://localhost:1234';
+        }
+        if (provider === 'ollama' && !settingStore.ai_endpoint.startsWith('http://localhost:11434')) {
+            settingStore.ai_endpoint = 'http://localhost:11434';
+        }
+        if (provider === 'open_ai') settingStore.ai_endpoint = 'https://api.openai.com';
+        if (provider === 'anthropic') settingStore.ai_endpoint = 'https://api.anthropic.com';
+        if (provider === 'mistral') settingStore.ai_endpoint = 'https://api.mistral.ai';
+
+        aiStore.selectedProvider = provider;
+        aiStore.apiUrl = settingStore.ai_endpoint;
+        await aiStore.refreshApiKeyStatus();
+        await aiStore.loadModels();
+        settingStore.ai_default_model = aiStore.selectedModel;
+    },
+);
+
+watch(
+    () => settingStore.ai_endpoint,
+    async (endpoint) => {
+        aiStore.apiUrl = endpoint;
+        await aiStore.loadModels();
+        settingStore.ai_default_model = aiStore.selectedModel;
+    },
+);
+
+watch(
+    [showSetting, activeTab],
+    async ([isOpen, tab]) => {
+        if (!isOpen) return;
+        if (tab === 'ai') {
+            await ensureAiInitialized();
+        }
+    },
+);
+
+const handleSaveApiKey = async () => {
+    if (!apiKeyInput.value.trim()) {
+        message.warning('Saisissez une clé API');
+        return;
+    }
+    try {
+        aiStore.selectedProvider = settingStore.ai_provider;
+        await aiStore.saveApiKey(apiKeyInput.value.trim());
+        apiKeyInput.value = '';
+        message.success('Clé API sauvegardée de manière sécurisée');
+    } catch (error) {
+        message.error('Impossible de sauvegarder la clé API');
+    }
+};
+
+const handleDeleteApiKey = async () => {
+    try {
+        aiStore.selectedProvider = settingStore.ai_provider;
+        await aiStore.deleteApiKey();
+        message.success('Clé API supprimée');
+    } catch (error) {
+        message.error('Impossible de supprimer la clé API');
+    }
+};
 
 const handleSavePaths = async () => {
     try {
@@ -75,7 +168,17 @@ const handleSavePaths = async () => {
 
 const handleReset = () => {
     settingStore.resetSettings();
+    aiStore.syncFromSettings();
     message.info('Paramètres réinitialisés');
+};
+
+const handleTestProvider = async () => {
+    aiStore.selectedProvider = settingStore.ai_provider;
+    aiStore.apiUrl = settingStore.ai_endpoint;
+    await aiStore.refreshApiKeyStatus();
+    await aiStore.checkConnection();
+    await aiStore.loadModels();
+    settingStore.ai_default_model = aiStore.selectedModel;
 };
 
 </script>
@@ -83,7 +186,7 @@ const handleReset = () => {
 <template>  
     <div>
         <NButton 
-            @click="showSetting = !showSetting" 
+            @click="toggleSettingsModal"
             tertiary 
             round 
             :disabled="inSync"
@@ -127,7 +230,7 @@ const handleReset = () => {
                     Une erreur s'est produite lors du chargement ou de la sauvegarde des paramètres.
                 </NAlert>
 
-                <NTabs type="line" animated class="settings-tabs">
+                <NTabs v-model:value="activeTab" type="line" animated class="settings-tabs">
                     <!-- Onglet Chemins de recherche -->
                     <NTabPane name="paths" class="tab-content">
                         <template #tab>
@@ -216,15 +319,23 @@ const handleReset = () => {
                                     Configuration du service d'intelligence artificielle
                                 </NText>
                                 <NText depth="3" class="text-xs mb-4 block">
-                                    Configurez l'URL de votre service LM Studio pour la recherche en langage naturel.
+                                    Choisissez un provider global (local ou cloud), configurez son endpoint et, pour le cloud, sa clé API sécurisée.
                                 </NText>
                             </div>
                             
                             <NForm>
-                                <NFormItem label="URL du service" class="ai-url-form-item">
+                                <NFormItem label="Provider IA">
+                                    <NSelect
+                                        v-model:value="settingStore.ai_provider"
+                                        :options="providerOptions"
+                                        placeholder="Choisir un provider"
+                                    />
+                                </NFormItem>
+
+                                <NFormItem v-if="isLocalProvider" label="URL du service local" class="ai-url-form-item">
                                     <NInput
-                                        v-model:value="settingStore.ai_path"
-                                        placeholder="http://localhost:11434 ou http://192.168.1.100:1234"
+                                        v-model:value="settingStore.ai_endpoint"
+                                        placeholder="http://localhost:1234 ou http://localhost:11434"
                                         type="text"
                                         class="ai-url-input"
                                         clearable
@@ -237,7 +348,38 @@ const handleReset = () => {
                                         </template>
                                     </NInput>
                                 </NFormItem>
+
+                                <NFormItem v-else label="Endpoint provider cloud">
+                                    <NInput v-model:value="settingStore.ai_endpoint" disabled />
+                                </NFormItem>
+
+                                <NFormItem label="Modèle par défaut">
+                                    <NSelect
+                                        v-model:value="aiStore.selectedModel"
+                                        :options="aiStore.availableModelOptions"
+                                        placeholder="Sélectionner un modèle"
+                                    />
+                                </NFormItem>
                             </NForm>
+
+                            <NCard v-if="needsApiKey">
+                                <div class="space-y-3">
+                                    <NText class="font-medium">Clé API cloud</NText>
+                                    <NInput
+                                        v-model:value="apiKeyInput"
+                                        type="password"
+                                        show-password-on="mousedown"
+                                        placeholder="Saisir une clé API (stockage sécurisé Tauri)"
+                                    />
+                                    <div class="flex items-center gap-2">
+                                        <NTag :type="aiStore.hasApiKey ? 'success' : 'warning'" round size="small">
+                                            {{ aiStore.hasApiKey ? 'Clé configurée' : 'Clé absente' }}
+                                        </NTag>
+                                        <NButton size="small" type="primary" @click="handleSaveApiKey">Sauvegarder la clé</NButton>
+                                        <NButton size="small" quaternary type="error" @click="handleDeleteApiKey">Supprimer la clé</NButton>
+                                    </div>
+                                </div>
+                            </NCard>
 
                             <!-- Informations de connexion -->
                             <NCard>
@@ -261,7 +403,7 @@ const handleReset = () => {
                                         </div>
                                     </div>
                                     <NButton 
-                                        @click="aiStore.init"
+                                        @click="handleTestProvider"
                                         :loading="aiStore.connectionStatus === 'connecting'"
                                         size="small"
                                         quaternary

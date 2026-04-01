@@ -69,12 +69,18 @@ pub fn run() {
         //AI
         ai_commands::ai_search,
         ai_commands::ai_health_check,
-        ai_commands::ai_list_models
+        ai_commands::ai_list_models,
+        ai_commands::ai_save_api_key,
+        ai_commands::ai_has_api_key,
+        ai_commands::ai_delete_api_key
     ])
     .setup(|app| {
         if let Some(window) = app.get_webview_window("main") {
             tracing::info!("📁 Starting file watcher on startup");
-            start_file_watcher_on_startup(app, window);
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                start_file_watcher_on_startup(&app_handle, window);
+            });
         } else {
             tracing::warn!("⚠️ Main window not found during setup");
         }

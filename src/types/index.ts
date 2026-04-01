@@ -3,3 +3,4 @@ export * from './stat';
 export * from "./file";
 export * from "./scan";
 export * from "./search";
+export * from "./ai";

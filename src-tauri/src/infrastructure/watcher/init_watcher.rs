@@ -2,7 +2,7 @@ use crate::application::factories::service_factory::get_service_repository;
 use crate::shared::config::AppState;
 use tauri::Manager;
 
-pub fn start_file_watcher_on_startup(app: &tauri::App, window: tauri::WebviewWindow) {
+pub fn start_file_watcher_on_startup(app: &tauri::AppHandle, window: tauri::WebviewWindow) {
     match get_service_repository() {
         Ok(service_repo) => {
             match service_repo.get_all_paths() {

@@ -24,8 +24,6 @@ impl AiService {
 
         let response = self.ai_port.generate(request).await?;
 
-        println!("AI Response content: {}", response.content);
-
         let cleaned_content = response.content
             .trim()
             .replace("\\{", "{")
@@ -34,16 +32,10 @@ impl AiService {
             .replace("\\n", "")
             .replace("\\t", "");
 
-        println!("Cleaned content: {}", cleaned_content);
-
         let search_query = serde_json::from_str::<SearchQuery>(&cleaned_content)
             .map_err(|e| {
-                println!("JSON parsing error: {}", e);
-                println!("Failed to parse content: {}", cleaned_content);
                 AiError::ParsingError(format!("Failed to parse AI response as SearchQuery: {}", e))
             })?;
-
-        println!("Parsed search_query: {:?}", search_query);
 
         Ok(search_query)
     }

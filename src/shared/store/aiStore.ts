@@ -1,6 +1,7 @@
 import {defineStore} from 'pinia';
 import {invoke} from '@tauri-apps/api/core';
-import type {SearchQuery} from '../../types';
+import type { AiProvider, AiProviderConfig, SearchQuery } from '../../types';
+import { useSettingStore } from "./settingStore";
 
 interface AiState {
     isConnected: boolean;
@@ -9,9 +10,11 @@ interface AiState {
     naturalSearch: string;
     availableModels: string[];
     selectedModel: string;
+    selectedProvider: AiProvider;
     connectionStatus: 'connected' | 'connecting' | 'disconnected' | 'error';
     lastError: string | null;
     apiUrl: string;
+    hasApiKey: boolean;
 }
 
 export const useAiStore = defineStore('ai', {
@@ -22,9 +25,11 @@ export const useAiStore = defineStore('ai', {
         isLoaded: false,
         availableModels: [],
         selectedModel: 'llama3.2',
+        selectedProvider: 'lm_studio',
         connectionStatus: 'disconnected',
         lastError: null,
-        apiUrl: 'http://localhost:11434',
+        apiUrl: 'http://localhost:1234',
+        hasApiKey: false,
     }),
 
     getters: {
@@ -42,12 +47,57 @@ export const useAiStore = defineStore('ai', {
     },
 
     actions: {
+        currentConfig(): AiProviderConfig {
+            return {
+                provider: this.selectedProvider,
+                endpoint: this.apiUrl,
+                model: this.selectedModel || null,
+                credential_ref: this.hasApiKey ? { credential_id: this.selectedProvider } : null,
+            };
+        },
+
+        syncFromSettings() {
+            const settingStore = useSettingStore();
+            this.selectedProvider = settingStore.ai_provider;
+            this.apiUrl = settingStore.ai_endpoint;
+            this.selectedModel = settingStore.ai_default_model || this.selectedModel;
+        },
+
+        requiresApiKey(provider: AiProvider): boolean {
+            return ['open_ai', 'anthropic', 'mistral'].includes(provider);
+        },
+
+        async refreshApiKeyStatus(): Promise<void> {
+            if (!this.requiresApiKey(this.selectedProvider)) {
+                this.hasApiKey = false;
+                return;
+            }
+            try {
+                this.hasApiKey = await invoke<boolean>('ai_has_api_key', {
+                    provider: this.selectedProvider,
+                });
+            } catch (error) {
+                this.hasApiKey = false;
+                this.lastError = error instanceof Error ? error.message : 'Erreur sur le statut de la clé API';
+            }
+        },
+
+        async saveApiKey(apiKey: string): Promise<void> {
+            await invoke('ai_save_api_key', { provider: this.selectedProvider, apiKey });
+            this.hasApiKey = true;
+        },
+
+        async deleteApiKey(): Promise<void> {
+            await invoke('ai_delete_api_key', { provider: this.selectedProvider });
+            this.hasApiKey = false;
+        },
+
         async checkConnection(): Promise<boolean> {
             this.connectionStatus = 'connecting';
             this.lastError = null;
 
             try {
-                const result = await invoke<boolean>('ai_health_check', { aiUrl: this.apiUrl});
+                const result = await invoke<boolean>('ai_health_check', { config: this.currentConfig() });
                 
                 this.isConnected = result;
                 this.connectionStatus = result ? 'connected' : 'disconnected';
@@ -62,15 +112,22 @@ export const useAiStore = defineStore('ai', {
         },
         async loadModels(): Promise<void> {
             try {
-                const models = await invoke<string[]>('ai_list_models', {aiUrl: this.apiUrl});
+                const models = await invoke<string[]>('ai_list_models', { config: this.currentConfig() });
                 this.availableModels = models;
 
-                if (models.length > 0) {
+                if (models.length === 0) {
+                    this.selectedModel = '';
+                    return;
+                }
+
+                if (!models.includes(this.selectedModel)) {
                     this.selectedModel = models[0] as string
                 }
             } catch (error) {
                 this.lastError = error instanceof Error ? error.message : 'Erreur lors du chargement des modèles';
                 console.error('Erreur lors de la récupération des modèles:', error);
+                this.availableModels = [];
+                this.selectedModel = '';
             }
         },
 
@@ -79,9 +136,8 @@ export const useAiStore = defineStore('ai', {
             this.isLoaded = false;
             try {
                 return await invoke<SearchQuery>('ai_search', {
-                    aiUrl: this.apiUrl,
                     naturalQuery: this.naturalSearch,
-                    model: this.selectedModel
+                    config: this.currentConfig(),
                 });
             } catch (error) {
                 console.error(error);
@@ -91,6 +147,8 @@ export const useAiStore = defineStore('ai', {
         },
 
         async init() {
+            this.syncFromSettings();
+            await this.refreshApiKeyStatus();
             await this.checkConnection();
             await this.loadModels();
         }
