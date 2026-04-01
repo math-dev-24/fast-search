@@ -137,18 +137,16 @@ pub fn index_content_async(
 
         emit_started_event(&window, EVENT_INDEX_STARTED);
 
-        let uncontent_indexed_files = {
+        let total_files = {
             let repo = lock_repository(&service_repository);
-            match repo.get_uncontent_indexed_files() {
-                Ok(files) => files,
+            match repo.get_uncontent_indexed_count() {
+                Ok(count) => count,
                 Err(e) => {
                     emit_error_event(&window, EVENT_INDEX_ERROR, format!("Erreur récupération fichiers: {}", e));
                     return;
                 }
             }
         };
-
-        let total_files = uncontent_indexed_files.len();
 
         if total_files == 0 {
             emit_finished_event(&window, EVENT_INDEX_FINISHED, IndexFinished {
@@ -163,18 +161,24 @@ pub fn index_content_async(
 
         tracing::info!("Démarrage de l'indexation de contenu pour {} fichiers", total_files);
         
-        // Traitement séquentiel par chunks plus petit pour un meilleur feedback
+        // Traitement par pages pour garder une mémoire bornée
         const CHUNK_SIZE_INDEX: usize = 10;
-        let chunks: Vec<Vec<File>> = uncontent_indexed_files
-            .chunks(CHUNK_SIZE_INDEX)
-            .map(|chunk| chunk.to_vec())
-            .collect();
-
-        let total_chunks = chunks.len();
+        let total_chunks = total_files.div_ceil(CHUNK_SIZE_INDEX);
         tracing::info!("Traitement par {} chunks de {} fichiers", total_chunks, CHUNK_SIZE_INDEX);
 
-        for (chunk_index, file_chunk) in chunks.into_iter().enumerate() {
+        for chunk_index in 0..total_chunks {
             tracing::info!("Traitement du chunk {} / {}", chunk_index + 1, total_chunks);
+            let offset = chunk_index * CHUNK_SIZE_INDEX;
+            let file_chunk = {
+                let repo = lock_repository(&service_repository);
+                match repo.get_uncontent_indexed_files_paginated(CHUNK_SIZE_INDEX, offset) {
+                    Ok(files) => files,
+                    Err(e) => {
+                        emit_error_event(&window, EVENT_INDEX_ERROR, format!("Erreur pagination fichiers: {}", e));
+                        return;
+                    }
+                }
+            };
             
             // Traitement parallèle du chunk avec futures
             let mut handles = Vec::new();

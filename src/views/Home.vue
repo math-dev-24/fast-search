@@ -1,19 +1,13 @@
 <template>
   <div class="home-view">
-    <NLayout class="min-h-screen">
-      <NLayoutHeader class="pt-2 px-6">
-        <NTabs
-            v-model:value="modeSearch"
-            size="large"
-            type="line"
-            animated
-        >
-          <NTab name="search" tab="🔍 Recherche Standard"/>
-          <NTab name="ai_search" tab="🤖 Recherche IA"/>
+    <NLayout>
+      <NLayoutContent>
+      <div class="mb-4">
+        <NTabs v-model:value="modeSearch" size="large" type="line" animated>
+          <NTab name="search" :tab="`🔍 ${t('home.tabStandard')}`"/>
+          <NTab name="ai_search" :tab="`🤖 ${t('home.tabAi')}`"/>
         </NTabs>
-      </NLayoutHeader>
-
-      <NLayoutContent class="p-6">
+      </div>
       <Search v-if="modeSearch === 'search'" @reset="handleReset" @search="handleSearch"/>
       <SearchWithAI v-if="modeSearch === 'ai_search'" :in-loading="searchStore.in_loading"
                     @search="handleSearchWithAi"/>
@@ -40,18 +34,18 @@
       <!-- Empty state initial -->
       <template v-if="!searchStore.is_loaded && !searchStore.in_loading">
         <NCard class="mt-6">
-          <div class="flex flex-col items-center justify-center py-16">
+          <div class="flex flex-col items-center justify-center gap-6 py-16">
             <NEmpty
-                class="mb-4"
-                description="Aucune recherche effectuée"
+                class="results-empty"
+                :description="t('home.emptyInitialTitle')"
                 size="large"
             >
               <template #icon>
-                <div class="text-6xl">🔍</div>
+                <div class="text-6xl leading-none">🔍</div>
               </template>
               <template #extra>
                 <NText class="text-center max-w-md" depth="3">
-                  Tapez une requête dans le champ de recherche ci-dessus pour commencer
+                  {{ t("home.emptyInitialHint") }}
                 </NText>
               </template>
             </NEmpty>
@@ -62,11 +56,11 @@
       <template v-if="searchStore.is_loaded && !searchStore.in_loading">
         <NCard :bordered="false" class="mb-2" embedded>
           <template #header>
-            <NText class="text-lg font-medium">📊 Statistiques de recherche</NText>
+            <NText class="text-lg font-medium">📊 {{ t("home.searchStatsTitle") }}</NText>
           </template>
           <NGrid :cols="3" :x-gap="16">
             <NGi>
-              <NStatistic label="Total des résultats" label-style="color: #666; font-size: 14px;">
+              <NStatistic :label="t('home.totalResults')" label-style="color: #666; font-size: 14px;">
                 <NNumberAnimation
                     :duration="800"
                     :from="previousTotalResults"
@@ -76,7 +70,7 @@
               </NStatistic>
             </NGi>
             <NGi>
-              <NStatistic label="Fichiers trouvés" label-style="color: #666; font-size: 14px;">
+              <NStatistic :label="t('home.filesFound')" label-style="color: #666; font-size: 14px;">
                 <NNumberAnimation
                     :duration="800"
                     :from="previousFilesCount"
@@ -86,7 +80,7 @@
               </NStatistic>
             </NGi>
             <NGi>
-              <NStatistic label="Dossiers trouvés" label-style="color: #666; font-size: 14px;">
+              <NStatistic :label="t('home.foldersFound')" label-style="color: #666; font-size: 14px;">
                 <NNumberAnimation
                     :duration="800"
                     :from="previousFoldersCount"
@@ -114,18 +108,18 @@
             />
           </NSpace>
           <NCard v-else-if="searchStore.filterResult.length === 0" key="empty" class="mt-6">
-            <div class="flex flex-col items-center justify-center py-16">
+            <div class="flex flex-col items-center justify-center gap-6 py-16">
               <NEmpty
-                  class="mb-4"
-                  description="Aucun résultat trouvé"
+                  class="results-empty"
+                  :description="t('home.emptyResultsTitle')"
                   size="large"
               >
                 <template #icon>
-                  <div class="text-6xl">🔍</div>
+                  <div class="text-6xl leading-none">🔍</div>
                 </template>
                 <template #extra>
                   <NText class="text-center max-w-md" depth="3">
-                    Essayez de modifier vos critères de recherche ou utilisez des mots-clés différents
+                    {{ t("home.emptyResultsHint") }}
                   </NText>
                 </template>
               </NEmpty>
@@ -154,7 +148,6 @@ import {
   NGrid,
   NLayout,
   NLayoutContent,
-  NLayoutHeader,
   NNumberAnimation,
   NSkeleton,
   NSpace,
@@ -164,6 +157,7 @@ import {
   NText,
   useMessage
 } from 'naive-ui';
+import { useI18n } from "vue-i18n";
 import SearchWithAI from '../components/Search/AISearch.vue';
 import Folders from '../components/Folders/index.vue';
 import Files from '../components/Files/index.vue';
@@ -175,6 +169,7 @@ import Search from "../components/Search/Search.vue";
 
 const searchStore = useSearchStore();
 const message = useMessage();
+const { t } = useI18n();
 const modeSearch = ref<string>('search');
 
 const detailFile = ref(null as null | File);
@@ -202,21 +197,21 @@ async function handleOpenFile(path: string) {
     const isDirectory = file?.is_dir ?? false;
     
     if (isDirectory) {
-      message.info('Ouverture du dossier en cours (cela peut prendre quelques secondes)...');
+      message.info(t("home.openingFolder"));
     } else {
-      message.info('Ouverture du fichier en cours (cela peut prendre quelques secondes)...');
+      message.info(t("home.openingFile"));
     }
     
     await searchStore.openFile(path);
     
     if (isDirectory) {
-      message.success('Dossier ouvert avec succès');
+      message.success(t("home.folderOpened"));
     } else {
-      message.success('Fichier ouvert avec succès');
+      message.success(t("home.fileOpened"));
     }
   } catch (error) {
     console.error('Erreur lors de l\'ouverture:', error);
-    message.error('Erreur lors de l\'ouverture. Vérifiez que le chemin est valide.');
+    message.error(t("home.openError"));
   }
 }
 
@@ -224,17 +219,17 @@ async function handleSearch() {
   try {
     await searchStore.searchFiles();
     if (searchStore.result.length === 0) {
-      message.info('Aucun résultat trouvé pour cette recherche');
+      message.info(t("home.noResults"));
     }
   } catch (error) {
-    message.error('Erreur lors de la recherche. Veuillez réessayer.');
+    message.error(t("home.searchError"));
     console.error('Erreur recherche:', error);
   }
 }
 
 function handleReset() {
   searchStore.reset_search();
-  message.info('Recherche réinitialisée');
+  message.info(t("home.searchReset"));
 }
 
 async function handleSearchWithAi(query: SearchQuery) {
@@ -243,10 +238,10 @@ async function handleSearchWithAi(query: SearchQuery) {
     modeSearch.value = 'search';
     await searchStore.searchFiles();
     if (searchStore.result.length === 0) {
-      message.info('Aucun résultat trouvé pour cette recherche IA');
+      message.info(t("home.noResultsAi"));
     }
   } catch (error) {
-    message.error('Erreur lors de la recherche IA. Veuillez réessayer.');
+    message.error(t("home.searchAiError"));
     console.error('Erreur recherche IA:', error);
   }
 }
@@ -270,5 +265,17 @@ async function handleSearchWithAi(query: SearchQuery) {
 .fade-expand-leave-to {
   opacity: 0;
   transform: translateY(-10px) scale(0.95);
+}
+
+:deep(.results-empty .n-empty__icon) {
+  margin-bottom: 14px;
+}
+
+:deep(.results-empty .n-empty__description) {
+  margin-top: 0;
+}
+
+:deep(.results-empty .n-empty__extra) {
+  margin-top: 14px;
 }
 </style>

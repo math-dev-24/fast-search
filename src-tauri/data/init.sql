@@ -100,7 +100,7 @@ DROP INDEX IF EXISTS idx_files_is_dir;
 DROP INDEX IF EXISTS idx_files_file_type;
 DROP INDEX IF EXISTS idx_files_is_hidden;
 
-ANALYZE;
+-- ANALYZE est coûteux au démarrage; exécuter en maintenance explicite si nécessaire.
 
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;

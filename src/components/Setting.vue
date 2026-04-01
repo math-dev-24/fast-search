@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {ref, computed, watch} from 'vue';
+import { useI18n } from "vue-i18n";
 import { 
   NButton, NModal, NCard, NDynamicInput, NIcon,
   NInput, NTabs, NTabPane, NAlert, NTag, NForm, NFormItem,
@@ -20,6 +21,7 @@ const apiKeyInput = ref<string>('');
 const settingStore = useSettingStore();
 const aiStore = useAiStore();
 const message = useMessage();
+const { t } = useI18n();
 
 defineProps<{
     inSync: boolean;
@@ -72,9 +74,9 @@ const handleSaveAll = async () => {
         await settingStore.savePaths();
         settingStore.saveAiSettings();
         await aiStore.init();
-        message.success('Paramètres sauvegardés avec succès');
+        message.success(t("messages.settingsSaved"));
     } catch (error) {
-        message.error('Erreur lors de la sauvegarde');
+        message.error(t("messages.settingsSaveError"));
         console.error('Erreur sauvegarde:', error);
     }
 };
@@ -134,16 +136,16 @@ watch(
 
 const handleSaveApiKey = async () => {
     if (!apiKeyInput.value.trim()) {
-        message.warning('Saisissez une clé API');
+        message.warning(t("messages.enterApiKey"));
         return;
     }
     try {
         aiStore.selectedProvider = settingStore.ai_provider;
         await aiStore.saveApiKey(apiKeyInput.value.trim());
         apiKeyInput.value = '';
-        message.success('Clé API sauvegardée de manière sécurisée');
+        message.success(t("messages.apiKeySaved"));
     } catch (error) {
-        message.error('Impossible de sauvegarder la clé API');
+        message.error(t("messages.apiKeySaveError"));
     }
 };
 
@@ -151,25 +153,25 @@ const handleDeleteApiKey = async () => {
     try {
         aiStore.selectedProvider = settingStore.ai_provider;
         await aiStore.deleteApiKey();
-        message.success('Clé API supprimée');
+        message.success(t("messages.apiKeyDeleted"));
     } catch (error) {
-        message.error('Impossible de supprimer la clé API');
+        message.error(t("messages.apiKeyDeleteError"));
     }
 };
 
 const handleSavePaths = async () => {
     try {
         await settingStore.savePaths();
-        message.success('Chemins sauvegardés avec succès');
+        message.success(t("messages.pathsSaved"));
     } catch (error) {
-        message.error('Erreur lors de la sauvegarde des chemins');
+        message.error(t("messages.pathsSaveError"));
     }
 };
 
 const handleReset = () => {
     settingStore.resetSettings();
     aiStore.syncFromSettings();
-    message.info('Paramètres réinitialisés');
+    message.info(t("messages.settingsReset"));
 };
 
 const handleTestProvider = async () => {
@@ -196,12 +198,12 @@ const handleTestProvider = async () => {
                     <Settings />
                 </NIcon>
             </template>
-            Réglages
+            {{ t("header.settings") }}
         </NButton>
         
         <NModal v-model:show="showSetting" class="custom-modal">
             <NCard
-                title="Paramètres de l'application"
+                :title="t('settings.title')"
                 :bordered="false"
                 class="w-full max-w-4xl bg-white dark:bg-gray-900 rounded-xl shadow-2xl"
                 :segmented="{
@@ -216,7 +218,7 @@ const handleTestProvider = async () => {
                                 <component :is="statusIcon" />
                             </NIcon>
                         </template>
-                        {{ settingStore.status === 'Ok' ? 'Configuré' : settingStore.status === 'Error' ? 'Erreur' : 'Chargement...' }}
+                        {{ settingStore.status === 'Ok' ? t("settings.configured") : settingStore.status === 'Error' ? t("settings.errorStatus") : t("common.loading") }}
                     </NTag>
                 </template>
 
@@ -225,9 +227,9 @@ const handleTestProvider = async () => {
                     v-if="settingStore.status === 'Error'" 
                     type="error" 
                     class="mb-6" 
-                    title="Erreur de configuration"
+                    :title="t('settings.configurationErrorTitle')"
                 >
-                    Une erreur s'est produite lors du chargement ou de la sauvegarde des paramètres.
+                    {{ t("settings.configurationErrorText") }}
                 </NAlert>
 
                 <NTabs v-model:value="activeTab" type="line" animated class="settings-tabs">
@@ -238,7 +240,7 @@ const handleTestProvider = async () => {
                                 <NIcon size="18">
                                     <FolderOutline />
                                 </NIcon>
-                                <span>Chemins de recherche</span>
+                                <span>{{ t("settings.pathsTab") }}</span>
                                 <NTag size="small" round type="info" class="ml-1">
                                     {{ settingStore.paths.length }}
                                 </NTag>
@@ -248,10 +250,10 @@ const handleTestProvider = async () => {
                         <div class="space-y-6 p-4">
                             <div>
                                 <NText class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 block">
-                                    Dossiers à indexer pour la recherche
+                                    {{ t("settings.foldersToIndex") }}
                                 </NText>
                                 <NText depth="3" class="text-xs mb-4 block">
-                                    Ajoutez les chemins des dossiers que vous souhaitez inclure dans l'indexation des fichiers.
+                                    {{ t("settings.foldersToIndexHint") }}
                                 </NText>
                             </div>
                             
@@ -259,7 +261,7 @@ const handleTestProvider = async () => {
                                 <NFormItem>
                                     <NDynamicInput 
                                         v-model:value="settingStore.paths" 
-                                        placeholder="Exemple: C:\Users\Documents ou /home/user/documents"
+                                        :placeholder="t('settings.pathsPlaceholder')"
                                         class="dynamic-input"
                                         :min="0"
                                         :max="20"
@@ -269,7 +271,7 @@ const handleTestProvider = async () => {
                             
                             <div class="flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
                                 <NText class="text-xs text-gray-500 dark:text-gray-400">
-                                    {{ settingStore.paths.length }} chemin{{ settingStore.paths.length > 1 ? 's' : '' }} configuré{{ settingStore.paths.length > 1 ? 's' : '' }}
+                                    {{ t("settings.pathsConfigured", { count: settingStore.paths.length, suffix: settingStore.paths.length > 1 ? "s" : "" }) }}
                                 </NText>
                                 <NButton 
                                     @click="handleSavePaths" 
@@ -283,7 +285,7 @@ const handleTestProvider = async () => {
                                             <SaveOutline />
                                         </NIcon>
                                     </template>
-                                    {{ settingStore.inLoading ? 'Sauvegarde...' : 'Sauvegarder les chemins' }}
+                                    {{ settingStore.inLoading ? t("settings.saving") : t("settings.savePaths") }}
                                 </NButton>
                             </div>
                         </div>
@@ -296,7 +298,7 @@ const handleTestProvider = async () => {
                                 <NIcon size="18">
                                     <ServerOutline />
                                 </NIcon>
-                                <span>Service IA</span>
+                                <span>{{ t("settings.aiTab") }}</span>
                               <div>
                                 <NTag
                                     :type="aiStore.isConnected ? 'success' : 'error'"
@@ -304,7 +306,7 @@ const handleTestProvider = async () => {
                                     round
                                     class="ml-1"
                                 >
-                                  {{ aiStore.isConnected ? 'En ligne' : 'Hors ligne' }}
+                                  {{ aiStore.isConnected ? t("settings.online") : t("settings.offline") }}
                                 </NTag>
                                 <NTag v-if="aiStore.availableModels.length > 0" size="small" round type="info" class="ml-1">
                                   {{aiStore.availableModels.length}}
@@ -316,26 +318,26 @@ const handleTestProvider = async () => {
                         <div class="space-y-6 py-2">
                             <div>
                                 <NText class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 block">
-                                    Configuration du service d'intelligence artificielle
+                                    {{ t("settings.aiConfigTitle") }}
                                 </NText>
                                 <NText depth="3" class="text-xs mb-4 block">
-                                    Choisissez un provider global (local ou cloud), configurez son endpoint et, pour le cloud, sa clé API sécurisée.
+                                    {{ t("settings.aiConfigHint") }}
                                 </NText>
                             </div>
                             
                             <NForm>
-                                <NFormItem label="Provider IA">
+                                <NFormItem :label="t('settings.providerLabel')">
                                     <NSelect
                                         v-model:value="settingStore.ai_provider"
                                         :options="providerOptions"
-                                        placeholder="Choisir un provider"
+                                        :placeholder="t('settings.providerPlaceholder')"
                                     />
                                 </NFormItem>
 
-                                <NFormItem v-if="isLocalProvider" label="URL du service local" class="ai-url-form-item">
+                                <NFormItem v-if="isLocalProvider" :label="t('settings.localUrl')" class="ai-url-form-item">
                                     <NInput
                                         v-model:value="settingStore.ai_endpoint"
-                                        placeholder="http://localhost:1234 ou http://localhost:11434"
+                                        :placeholder="t('settings.localUrlPlaceholder')"
                                         type="text"
                                         class="ai-url-input"
                                         clearable
@@ -349,34 +351,34 @@ const handleTestProvider = async () => {
                                     </NInput>
                                 </NFormItem>
 
-                                <NFormItem v-else label="Endpoint provider cloud">
+                                <NFormItem v-else :label="t('settings.cloudEndpoint')">
                                     <NInput v-model:value="settingStore.ai_endpoint" disabled />
                                 </NFormItem>
 
-                                <NFormItem label="Modèle par défaut">
+                                <NFormItem :label="t('settings.defaultModel')">
                                     <NSelect
                                         v-model:value="aiStore.selectedModel"
                                         :options="aiStore.availableModelOptions"
-                                        placeholder="Sélectionner un modèle"
+                                        :placeholder="t('settings.defaultModelPlaceholder')"
                                     />
                                 </NFormItem>
                             </NForm>
 
                             <NCard v-if="needsApiKey">
                                 <div class="space-y-3">
-                                    <NText class="font-medium">Clé API cloud</NText>
+                                    <NText class="font-medium">{{ t("settings.apiKeyTitle") }}</NText>
                                     <NInput
                                         v-model:value="apiKeyInput"
                                         type="password"
                                         show-password-on="mousedown"
-                                        placeholder="Saisir une clé API (stockage sécurisé Tauri)"
+                                        :placeholder="t('settings.apiKeyPlaceholder')"
                                     />
                                     <div class="flex items-center gap-2">
                                         <NTag :type="aiStore.hasApiKey ? 'success' : 'warning'" round size="small">
-                                            {{ aiStore.hasApiKey ? 'Clé configurée' : 'Clé absente' }}
+                                            {{ aiStore.hasApiKey ? t("settings.apiKeyConfigured") : t("settings.apiKeyMissing") }}
                                         </NTag>
-                                        <NButton size="small" type="primary" @click="handleSaveApiKey">Sauvegarder la clé</NButton>
-                                        <NButton size="small" quaternary type="error" @click="handleDeleteApiKey">Supprimer la clé</NButton>
+                                        <NButton size="small" type="primary" @click="handleSaveApiKey">{{ t("settings.saveApiKey") }}</NButton>
+                                        <NButton size="small" quaternary type="error" @click="handleDeleteApiKey">{{ t("settings.deleteApiKey") }}</NButton>
                                     </div>
                                 </div>
                             </NCard>
@@ -385,7 +387,7 @@ const handleTestProvider = async () => {
                             <NCard>
                                 <div class="flex items-center justify-between">
                                     <div>
-                                        <NText class="font-medium">Statut de la connexion</NText>
+                                        <NText class="font-medium">{{ t("settings.connectionStatus") }}</NText>
                                         <div class="flex items-center gap-2 mt-1">
                                             <NTag 
                                                 :type="aiStore.connectionStatus === 'connected' ? 'success' : 
@@ -393,12 +395,12 @@ const handleTestProvider = async () => {
                                                 size="small"
                                                 round
                                             >
-                                                {{ aiStore.connectionStatus === 'connected' ? 'Connecté' : 
-                                                   aiStore.connectionStatus === 'connecting' ? 'Connexion...' : 
-                                                   aiStore.connectionStatus === 'error' ? 'Erreur' : 'Déconnecté' }}
+                                                {{ aiStore.connectionStatus === 'connected' ? t("aiSearch.connected") :
+                                                   aiStore.connectionStatus === 'connecting' ? t("aiSearch.connecting") :
+                                                   aiStore.connectionStatus === 'error' ? t("aiSearch.error") : t("aiSearch.disconnected") }}
                                             </NTag>
                                             <NText depth="3" class="text-xs">
-                                                {{ aiStore.availableModels.length }} modèle{{ aiStore.availableModels.length > 1 ? 's' : '' }} disponible{{ aiStore.availableModels.length > 1 ? 's' : '' }}
+                                                {{ t("settings.modelsAvailable", { count: aiStore.availableModels.length, suffix: aiStore.availableModels.length > 1 ? "s" : "" }) }}
                                             </NText>
                                         </div>
                                     </div>
@@ -414,7 +416,7 @@ const handleTestProvider = async () => {
                                                 <RefreshOutline />
                                             </NIcon>
                                         </template>
-                                        Tester
+                                        {{ t("settings.test") }}
                                     </NButton>
                                 </div>
                                 
@@ -442,7 +444,7 @@ const handleTestProvider = async () => {
                                     <RefreshOutline />
                                 </NIcon>
                             </template>
-                            Réinitialiser
+                            {{ t("common.reset") }}
                         </NButton>
                         
                         <div class="flex gap-3">
@@ -451,7 +453,7 @@ const handleTestProvider = async () => {
                                 quaternary
                                 size="medium"
                             >
-                                Fermer
+                                {{ t("settings.close") }}
                             </NButton>
                             <NButton 
                                 @click="handleSaveAll"
@@ -465,7 +467,7 @@ const handleTestProvider = async () => {
                                         <SaveOutline />
                                     </NIcon>
                                 </template>
-                                {{ settingStore.inLoading ? 'Sauvegarde...' : 'Tout sauvegarder' }}
+                                {{ settingStore.inLoading ? t("settings.saving") : t("settings.saveAll") }}
                             </NButton>
                         </div>
                     </div>

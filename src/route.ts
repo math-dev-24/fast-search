@@ -7,12 +7,14 @@ const router = createRouter({
     routes: [
         {
             path: '/',
-            name: 'Accueil',
+            name: 'home',
+            meta: { labelKey: "header.home" },
             component: Home
         },
         {
             path: '/statistique',
-            name: 'Statistique',
+            name: 'statistics',
+            meta: { labelKey: "header.statistics" },
             component: Statistique
         }
     ]

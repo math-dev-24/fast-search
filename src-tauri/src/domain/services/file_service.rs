@@ -60,6 +60,17 @@ impl<T: FileRepository> FileService<T> {
     pub fn get_uncontent_indexed_files(&self) -> AppResult<Vec<File>> {
         self.repository.get_uncontent_indexed_files()
     }
+    
+    pub fn get_uncontent_indexed_count(&self) -> AppResult<usize> {
+        self.repository.get_uncontent_indexed_count()
+    }
+    
+    pub fn get_uncontent_indexed_files_paginated(&self, limit: usize, offset: usize) -> AppResult<Vec<File>> {
+        if limit == 0 || limit > 1000 {
+            return Err(AppError::Validation("Pagination limit must be between 1 and 1000".to_string()));
+        }
+        self.repository.get_uncontent_indexed_files_paginated(limit, offset)
+    }
 
     pub fn update_file_index_status(
         &mut self,

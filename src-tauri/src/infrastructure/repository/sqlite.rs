@@ -51,7 +51,7 @@ impl FileRepository for Db {
 
         let need_delete_paths: Vec<String> = db_paths.iter().filter(|path| !new_paths.contains(path)).cloned().collect();
 
-        let new_paths: Vec<String> = new_paths.iter().filter(|path| !db_paths.contains(path)).cloned().collect();
+        let added_paths: Vec<String> = new_paths.iter().filter(|path| !db_paths.contains(path)).cloned().collect();
 
         for path in &need_delete_paths {
             self.delete_files_by_path_prefix(path)?;
@@ -79,7 +79,7 @@ impl FileRepository for Db {
                     tracing::error!("Failed to commit insert_paths transaction: {}", e);
                     AppError::Database(e)
                 })?;
-                Ok(new_paths)
+                Ok(added_paths)
             }
             Err(e) => {
                 if let Err(rollback_err) = tx.rollback() {
@@ -286,6 +286,7 @@ impl FileRepository for Db {
         self.conn.execute("DELETE FROM files", [])?;
         self.conn.execute("DELETE FROM types", [])?;
         self.conn.execute("DELETE FROM paths", [])?;
+        self.conn.execute("DELETE FROM fts_content", [])?;
         Ok(())
     }
 
@@ -315,10 +316,17 @@ impl FileRepository for Db {
                 Err(e) => return Err(e.into()),
             };
 
-            tx.execute(
-                "INSERT OR REPLACE INTO fts_content (content, file_id) VALUES (?, ?)",
-                rusqlite::params![content_hash, file_id]
-            )?;
+            if is_indexable && !content_hash.is_empty() {
+                tx.execute(
+                    "INSERT OR REPLACE INTO fts_content (content, file_id) VALUES (?, ?)",
+                    rusqlite::params![content_hash, file_id]
+                )?;
+            } else {
+                tx.execute(
+                    "DELETE FROM fts_content WHERE file_id = ?",
+                    rusqlite::params![file_id]
+                )?;
+            }
 
             tx.execute(
                 "UPDATE files SET content_indexed = ?, is_indexable = ? WHERE path = ?",
@@ -351,6 +359,25 @@ impl FileRepository for Db {
         let mut stmt = self.conn.prepare("SELECT * FROM files WHERE content_indexed = 0 AND is_indexable = 1")?;
         let files: Vec<File> = stmt
             .query_map([], |row| { Self::map_row_to_file(row) })?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        Ok(files)
+    }
+    
+    fn get_uncontent_indexed_count(&self) -> AppResult<usize> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM files WHERE content_indexed = 0 AND is_indexable = 1",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count as usize)
+    }
+    
+    fn get_uncontent_indexed_files_paginated(&self, limit: usize, offset: usize) -> AppResult<Vec<File>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT * FROM files WHERE content_indexed = 0 AND is_indexable = 1 LIMIT ? OFFSET ?"
+        )?;
+        let files: Vec<File> = stmt
+            .query_map(rusqlite::params![limit as i64, offset as i64], Self::map_row_to_file)?
             .collect::<SqliteResult<Vec<_>>>()?;
         Ok(files)
     }

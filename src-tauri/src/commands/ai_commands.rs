@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 type ModelCacheMap = HashMap<String, (Instant, Vec<String>)>;
 static MODEL_CACHE: OnceLock<Mutex<ModelCacheMap>> = OnceLock::new();
 const MODEL_CACHE_TTL: Duration = Duration::from_secs(30);
+const MODEL_CACHE_MAX_ENTRIES: usize = 64;
 
 fn model_cache() -> &'static Mutex<ModelCacheMap> {
     MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -61,6 +62,19 @@ pub async fn ai_list_models(config: AiProviderConfig) -> Result<Vec<String>, Str
         .map_err(|e| format!("Failed to list models: {}", e))?;
 
     if let Ok(mut cache) = model_cache().lock() {
+        // First clear stale entries, then enforce a hard cap.
+        cache.retain(|_, (inserted_at, _)| inserted_at.elapsed() < MODEL_CACHE_TTL);
+        while cache.len() >= MODEL_CACHE_MAX_ENTRIES {
+            let oldest_key = cache
+                .iter()
+                .max_by_key(|(_, (inserted_at, _))| inserted_at.elapsed())
+                .map(|(key, _)| key.clone());
+            if let Some(key) = oldest_key {
+                cache.remove(&key);
+            } else {
+                break;
+            }
+        }
         cache.insert(cache_key, (Instant::now(), models.clone()));
     }
 

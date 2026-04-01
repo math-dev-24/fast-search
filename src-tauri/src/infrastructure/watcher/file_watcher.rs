@@ -4,15 +4,14 @@ use crate::application::events::emitters::{
     EVENT_FILE_CREATED, EVENT_FILE_MODIFIED, EVENT_FILE_DELETED
 };
 use crate::shared::errors::{AppError, AppResult};
-use notify::{Watcher, RecursiveMode, Config, PollWatcher, Event, EventKind};
-use std::time::Duration;
+use notify::{Watcher, RecursiveMode, Config, RecommendedWatcher, Event, EventKind};
 use std::path::Path;
 use tokio::task::JoinHandle;
 use tauri::WebviewWindow;
 use std::sync::{Arc, Mutex};
 
 pub struct AsyncFileWatcher {
-    watcher: Option<PollWatcher>,
+    watcher: Option<RecommendedWatcher>,
     is_watching: bool,
     task_handle: Option<JoinHandle<()>>,
     window: WebviewWindow,
@@ -53,10 +52,11 @@ impl AsyncFileWatcher {
         let (notify_tx, notify_rx) = std::sync::mpsc::channel();
 
         let config = Config::default()
-            .with_poll_interval(Duration::from_secs(2))
             .with_compare_contents(false);
 
-        let mut watcher = PollWatcher::new(notify_tx, config)
+        let mut watcher = RecommendedWatcher::new(move |res| {
+            let _ = notify_tx.send(res);
+        }, config)
             .map_err(|e| {
                 let error_msg = format!("Failed to create watcher: {}", e);
                 emit_error_event(&self.window, EVENT_WATCHER_ERROR, &error_msg);

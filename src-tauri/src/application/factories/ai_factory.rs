@@ -9,27 +9,28 @@ pub struct AiFactory;
 
 impl AiFactory {
     pub fn create(config: &AiProviderConfig, api_key: Option<String>) -> AppResult<Arc<dyn Ai>> {
+        let endpoint = Self::validate_endpoint(config)?;
         let adapter: Arc<dyn Ai> = match config.provider {
             AiProvider::LmStudio => Arc::new(LmStudio::new(
-                Some(config.endpoint.clone()),
+                Some(endpoint.clone()),
                 config.model.clone(),
             )),
             AiProvider::Ollama => Arc::new(Ollama::new(
-                Some(config.endpoint.clone()),
+                Some(endpoint.clone()),
                 config.model.clone(),
             )),
             AiProvider::OpenAi => Arc::new(OpenAi::new(
-                Some(config.endpoint.clone()),
+                Some(endpoint.clone()),
                 config.model.clone(),
                 Self::require_api_key(api_key, "OpenAI")?,
             )),
             AiProvider::Anthropic => Arc::new(Anthropic::new(
-                Some(config.endpoint.clone()),
+                Some(endpoint.clone()),
                 config.model.clone(),
                 Self::require_api_key(api_key, "Anthropic")?,
             )),
             AiProvider::Mistral => Arc::new(Mistral::new(
-                Some(config.endpoint.clone()),
+                Some(endpoint.clone()),
                 config.model.clone(),
                 Self::require_api_key(api_key, "Mistral")?,
             )),
@@ -44,6 +45,40 @@ impl AiFactory {
             _ => Err(AppError::Ai(AiError::AuthError(format!(
                 "{provider_name} API key is required"
             )))),
+        }
+    }
+
+    fn validate_endpoint(config: &AiProviderConfig) -> AppResult<String> {
+        let parsed = reqwest::Url::parse(&config.endpoint)
+            .map_err(|_| AppError::Ai(AiError::ConfigError("Invalid AI endpoint URL".to_string())))?;
+        let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+
+        match config.provider {
+            AiProvider::LmStudio | AiProvider::Ollama => Ok(config.endpoint.clone()),
+            AiProvider::OpenAi => {
+                if parsed.scheme() != "https" || host != "api.openai.com" {
+                    return Err(AppError::Ai(AiError::ConfigError(
+                        "OpenAI endpoint must be https://api.openai.com".to_string(),
+                    )));
+                }
+                Ok(config.endpoint.clone())
+            }
+            AiProvider::Anthropic => {
+                if parsed.scheme() != "https" || host != "api.anthropic.com" {
+                    return Err(AppError::Ai(AiError::ConfigError(
+                        "Anthropic endpoint must be https://api.anthropic.com".to_string(),
+                    )));
+                }
+                Ok(config.endpoint.clone())
+            }
+            AiProvider::Mistral => {
+                if parsed.scheme() != "https" || host != "api.mistral.ai" {
+                    return Err(AppError::Ai(AiError::ConfigError(
+                        "Mistral endpoint must be https://api.mistral.ai".to_string(),
+                    )));
+                }
+                Ok(config.endpoint.clone())
+            }
         }
     }
 }

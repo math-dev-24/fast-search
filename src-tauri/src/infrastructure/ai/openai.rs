@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::domain::entities::ai::{AiError, AiRequest, AiResponse};
 use crate::domain::ports::ai::Ai;
@@ -58,12 +59,21 @@ pub struct OpenAi {
 
 impl OpenAi {
     pub fn new(base_url: Option<String>, default_model: Option<String>, api_key: String) -> Self {
+        let client = Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| Client::new());
         Self {
-            client: Client::new(),
+            client,
             base_url: base_url.unwrap_or_else(|| "https://api.openai.com".to_string()),
             default_model: default_model.unwrap_or_else(|| "gpt-4o-mini".to_string()),
             api_key,
         }
+    }
+    
+    fn should_retry_status(status: reqwest::StatusCode) -> bool {
+        status.as_u16() == 429 || status.is_server_error()
     }
 }
 
@@ -86,14 +96,23 @@ impl Ai for OpenAi {
             max_tokens: request.max_tokens.unwrap_or(500),
         };
 
-        let response = self
-            .client
-            .post(format!("{}/v1/chat/completions", self.base_url))
-            .bearer_auth(&self.api_key)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| AiError::ConnectionError(e.to_string()))?;
+        let mut attempt = 0u8;
+        let response = loop {
+            let resp = self
+                .client
+                .post(format!("{}/v1/chat/completions", self.base_url))
+                .bearer_auth(&self.api_key)
+                .json(&payload)
+                .send()
+                .await
+                .map_err(|e| AiError::ConnectionError(e.to_string()))?;
+            if Self::should_retry_status(resp.status()) && attempt < 2 {
+                attempt += 1;
+                tokio::time::sleep(Duration::from_millis(200 * u64::from(attempt))).await;
+                continue;
+            }
+            break resp;
+        };
 
         if !response.status().is_success() {
             return Err(AppError::Ai(AiError::RequestFailed(format!(
@@ -120,13 +139,22 @@ impl Ai for OpenAi {
     }
 
     async fn list_models(&self) -> AppResult<Vec<String>> {
-        let response = self
-            .client
-            .get(format!("{}/v1/models", self.base_url))
-            .bearer_auth(&self.api_key)
-            .send()
-            .await
-            .map_err(|e| AiError::ConnectionError(e.to_string()))?;
+        let mut attempt = 0u8;
+        let response = loop {
+            let resp = self
+                .client
+                .get(format!("{}/v1/models", self.base_url))
+                .bearer_auth(&self.api_key)
+                .send()
+                .await
+                .map_err(|e| AiError::ConnectionError(e.to_string()))?;
+            if Self::should_retry_status(resp.status()) && attempt < 2 {
+                attempt += 1;
+                tokio::time::sleep(Duration::from_millis(200 * u64::from(attempt))).await;
+                continue;
+            }
+            break resp;
+        };
 
         if !response.status().is_success() {
             return Err(AppError::Ai(AiError::RequestFailed(format!(
@@ -144,6 +172,6 @@ impl Ai for OpenAi {
     }
 
     async fn health_check(&self) -> AppResult<bool> {
-        self.list_models().await.map(|_| true)
+        Ok(!self.api_key.is_empty())
     }
 }

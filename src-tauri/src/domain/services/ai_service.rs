@@ -23,15 +23,7 @@ impl AiService {
         };
 
         let response = self.ai_port.generate(request).await?;
-
-        let cleaned_content = response.content
-            .trim()
-            .replace("\\{", "{")
-            .replace("\\}", "}")
-            .replace("\\\"", "\"")
-            .replace("\\n", "")
-            .replace("\\t", "");
-
+        let cleaned_content = Self::extract_json_payload(&response.content);
         let search_query = serde_json::from_str::<SearchQuery>(&cleaned_content)
             .map_err(|e| {
                 AiError::ParsingError(format!("Failed to parse AI response as SearchQuery: {}", e))
@@ -54,5 +46,16 @@ impl AiService {
             Err(e) => return Err(e)
         };
         Ok(available_models.iter().any(|m| m == model))
+    }
+    
+    fn extract_json_payload(raw: &str) -> String {
+        let trimmed = raw.trim();
+        if let Some(stripped) = trimmed.strip_prefix("```json") {
+            return stripped.trim().trim_end_matches("```").trim().to_string();
+        }
+        if let Some(stripped) = trimmed.strip_prefix("```") {
+            return stripped.trim().trim_end_matches("```").trim().to_string();
+        }
+        trimmed.to_string()
     }
 }

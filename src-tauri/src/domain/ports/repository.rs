@@ -16,4 +16,6 @@ pub trait FileRepository {
     fn reset_data(&self) -> AppResult<()>;
     fn update_file_index_status(&mut self, file: &File, content_hash: String, is_indexable: bool) -> AppResult<()>;
     fn get_uncontent_indexed_files(&self) -> AppResult<Vec<File>>;
+    fn get_uncontent_indexed_count(&self) -> AppResult<usize>;
+    fn get_uncontent_indexed_files_paginated(&self, limit: usize, offset: usize) -> AppResult<Vec<File>>;
 }

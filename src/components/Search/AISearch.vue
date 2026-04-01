@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import {computed, onMounted} from 'vue';
 import {NAlert, NButton, NIcon, NInput, NSelect, NSpace, NTag, NText} from 'naive-ui';
+import { useI18n } from "vue-i18n";
 import {
   CheckmarkCircleOutline,
   CloseCircleOutline,
@@ -13,6 +14,7 @@ import {SearchQuery} from "../../types";
 
 
 const aiStore = useAiStore();
+const { t } = useI18n();
 
 const props = defineProps<{
   inLoading: boolean;
@@ -51,30 +53,30 @@ const connectionStatusType = computed(() => {
 const connectionStatusText = computed(() => {
   switch (aiStore.connectionStatus) {
     case 'connected':
-      return 'Connecté';
+      return t("aiSearch.connected");
     case 'connecting':
-      return 'Connexion...';
+      return t("aiSearch.connecting");
     case 'error':
-      return 'Erreur';
+      return t("aiSearch.error");
     default:
-      return 'Déconnecté';
+      return t("aiSearch.disconnected");
   }
 });
 
 const getButtonLabel = () => {
   if (aiStore.inLoading || props.inLoading) {
-    return 'Recherche...';
+    return t("aiSearch.searching");
   }
   if (aiStore.connectionStatus !== 'connected') {
-    return 'En attente de connexion IA';
+    return t("aiSearch.waitingConnection");
   }
   if (!aiStore.selectedModel) {
-    return 'Sélectionner un modèle';
+    return t("aiSearch.selectModel");
   }
   if (!aiStore.naturalSearch?.trim()) {
-    return 'Entrer une requête';
+    return t("aiSearch.enterQuery");
   }
-  return 'Rechercher';
+  return t("aiSearch.search");
 };
 
 const handleSearch = async () => {
@@ -99,9 +101,7 @@ onMounted(() => {
       <div class="header-left flex items-center gap-3">
         <div class="flex items-center gap-2">
           <div class="w-2 h-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full animate-pulse"></div>
-            <h3 class="search-title text-xl font-bold">
-              Recherche avec l'IA
-            </h3>
+            <h3 class="search-title text-xl font-bold">{{ t("aiSearch.title") }}</h3>
         </div>
         <div class="status-indicator flex items-center gap-2">
           <div class="ai-status flex items-center gap-1">
@@ -141,7 +141,7 @@ onMounted(() => {
       <NText depth="3" class="text-xs italic">
         {{ aiStore.selectedProvider }} | {{aiStore.apiUrl}}
         <NButton text size="tiny" @click="() => {}" class="ml-1">
-          (Configurer)
+          ({{ t("aiSearch.configure") }})
         </NButton>
       </NText>
     </div>
@@ -154,25 +154,25 @@ onMounted(() => {
             :disabled="aiStore.connectionStatus !== 'connected' || !aiStore.selectedModel"
             class="search-textarea transition-all duration-200"
             clearable
-            placeholder="Décrivez ce que vous recherchez en langage naturel..."
+            :placeholder="t('aiSearch.placeholder')"
             type="textarea"
         />
         <div class="absolute bottom-2 right-2 text-xs text-gray-400 dark:text-gray-500 font-medium">
-          {{ aiStore.naturalSearch?.length || 0 }} caractères
+          {{ aiStore.naturalSearch?.length || 0 }} {{ t("aiSearch.characters") }}
         </div>
       </div>
     </div>
 
     <div class="mb-6">
       <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        Modèle IA
+        {{ t("aiSearch.modelLabel") }}
       </label>
       <NSelect
           v-model:value="aiStore.selectedModel"
           :disabled="aiStore.connectionStatus !== 'connected' || aiStore.availableModels.length === 0"
           :options="aiStore.availableModelOptions"
           class="w-full transition-all duration-200"
-          placeholder="Sélectionner un modèle IA"
+          :placeholder="t('aiSearch.modelPlaceholder')"
       />
     </div>
 
@@ -198,18 +198,18 @@ onMounted(() => {
           type="warning"
       >
         <template #header>
-          Service IA non disponible
+          {{ t("aiSearch.serviceUnavailable") }}
         </template>
         <div class="space-y-2">
           <NText>
-            Le service d'intelligence artificielle n'est pas accessible. Pour utiliser la recherche IA :
+            {{ t("aiSearch.serviceUnavailableHint") }}
           </NText>
           <ul class="list-disc list-inside space-y-1 ml-2">
-            <li>Assurez-vous que votre provider IA est disponible (local ou cloud)</li>
-            <li>Si provider cloud: vérifiez qu'une clé API est enregistrée</li>
-            <li>Vérifiez que l'URL du service est correcte dans les paramètres</li>
-            <li>L'URL par défaut est <code class="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">http://localhost:1234</code></li>
-            <li>Vous pouvez modifier l'URL dans les Réglages (icône ⚙️ dans le header)</li>
+            <li>{{ t("aiSearch.hintProviderAvailable") }}</li>
+            <li>{{ t("aiSearch.hintApiKey") }}</li>
+            <li>{{ t("aiSearch.hintEndpoint") }}</li>
+            <li>{{ t("aiSearch.hintDefaultUrl") }} <code class="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">http://localhost:1234</code></li>
+            <li>{{ t("aiSearch.hintSettings") }}</li>
           </ul>
         </div>
       </NAlert>
@@ -220,7 +220,7 @@ onMounted(() => {
           :show-icon="true"
           type="info"
       >
-        Aucun modèle sélectionné. Veuillez choisir un modèle IA.
+        {{ t("aiSearch.noModelSelected") }}
       </NAlert>
     </div>
   </div>

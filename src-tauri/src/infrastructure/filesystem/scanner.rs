@@ -5,7 +5,6 @@ use crate::application::events::emitters::{emit_event, emit_error_event, emit_st
 use std::path::Path;
 use tauri::WebviewWindow;
 use std::sync::{Arc, Mutex};
-use crate::domain::entities::file::File;
 use crate::domain::entities::scan::{ScanProgress, ScanCollected, InsertProgress, ScanFinished};
 use crate::domain::entities::progress::ScanProgressTracker;
 use crate::infrastructure::filesystem::collect::collect_files_and_folders;
@@ -44,8 +43,8 @@ impl ScanContext {
     }
 }
 
-fn collect_all_files(paths: &[String], context: &ScanContext) -> Result<Vec<File>, Vec<String>> {
-    let mut all_files = Vec::new();
+fn collect_and_insert_files(paths: &[String], context: &ScanContext) -> Result<usize, Vec<String>> {
+    let mut total_inserted = 0usize;
     let mut errors = Vec::new();
 
     for (path_index, path) in paths.iter().enumerate() {
@@ -83,22 +82,29 @@ fn collect_all_files(paths: &[String], context: &ScanContext) -> Result<Vec<File
             }
         });
 
-        all_files.extend(files_for_path);
+        let inserted_for_path = match insert_files_in_chunks(&files_for_path, context) {
+            Ok(count) => count,
+            Err(e) => {
+                errors.push(e);
+                0
+            }
+        };
+        total_inserted += inserted_for_path;
 
         if let Ok(mut tracker) = context.progress_tracker.lock() {
             tracker.next_path();
-            tracker.set_total_files(all_files.len());
+            tracker.set_total_files(total_inserted);
         }
     }
 
     if errors.is_empty() {
-        Ok(all_files)
+        Ok(total_inserted)
     } else {
         Err(errors)
     }
 }
 
-fn insert_files_in_chunks(files: &[File], context: &ScanContext) -> Result<usize, String> {
+fn insert_files_in_chunks(files: &[crate::domain::entities::file::File], context: &ScanContext) -> Result<usize, String> {
     let total_files = files.len();
     let total_chunks = (total_files + CHUNK_SIZE - 1) / CHUNK_SIZE;
     let mut insert_errors = 0;
@@ -160,9 +166,9 @@ pub fn scan_files_async(
 
         emit_started_event(&window, EVENT_SCAN_STARTED);
 
-        // Phase 1: Collecte des fichiers
-        let all_files = match collect_all_files(&paths, &context) {
-            Ok(files) => files,
+        // Phase 1 + 2: collecte et insertion par chemin pour limiter la mémoire
+        let success_count = match collect_and_insert_files(&paths, &context) {
+            Ok(count) => count,
             Err(errors) => {
                 let message = format!("Erreurs lors de la collecte: {}", errors.join(", "));
                 emit_finished_event(&window, EVENT_SCAN_FINISHED, ScanFinished { total: 0, message });
@@ -170,33 +176,19 @@ pub fn scan_files_async(
             }
         };
 
-        let total_files = all_files.len();
-
         // Émission de l'événement de collecte terminée
         emit_event(&window, EVENT_SCAN_COLLECTED, ScanCollected {
-            total: total_files,
-            message: format!("Collecte terminée: {} fichiers trouvés", total_files),
+            total: success_count,
+            message: format!("Collecte/insertion terminée: {} fichiers traités", success_count),
         });
 
-        if total_files == 0 {
+        if success_count == 0 {
             emit_finished_event(&window, EVENT_SCAN_FINISHED, ScanFinished {
                 total: 0,
                 message: "Aucun fichier trouvé".to_string(),
             });
             return;
         }
-
-        // Phase 2: Insertion des fichiers en base
-        let success_count = match insert_files_in_chunks(&all_files, &context) {
-            Ok(count) => count,
-            Err(e) => {
-                emit_finished_event(&window, EVENT_SCAN_FINISHED, ScanFinished {
-                    total: 0,
-                    message: format!("Erreur lors de l'insertion: {}", e),
-                });
-                return;
-            }
-        };
 
         // Finalisation
         emit_finished_event(&window, EVENT_SCAN_FINISHED, ScanFinished {

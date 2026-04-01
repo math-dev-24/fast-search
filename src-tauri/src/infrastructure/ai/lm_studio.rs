@@ -3,6 +3,7 @@ use crate::domain::entities::ai::{AiRequest, AiResponse, AiError};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Serialize, Deserialize};
+use std::time::Duration;
 use crate::shared::errors::{AppError, AppResult};
 
 #[derive(Debug, Serialize)]
@@ -104,8 +105,13 @@ pub struct LmStudio {
 
 impl LmStudio {
     pub fn new(base_url: Option<String>, default_model: Option<String>) -> Self {
+        let client = Client::builder()
+            .connect_timeout(Duration::from_secs(3))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| Client::new());
         Self {
-            client: Client::new(),
+            client,
             base_url: base_url.unwrap_or_else(|| "http://localhost:1234".to_string()),
             default_model: default_model.unwrap_or_else(|| "local-model".to_string()),
         }

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::domain::entities::ai::{AiError, AiRequest, AiResponse};
 use crate::domain::ports::ai::Ai;
@@ -49,8 +50,13 @@ pub struct Ollama {
 
 impl Ollama {
     pub fn new(base_url: Option<String>, default_model: Option<String>) -> Self {
+        let client = Client::builder()
+            .connect_timeout(Duration::from_secs(3))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| Client::new());
         Self {
-            client: Client::new(),
+            client,
             base_url: base_url.unwrap_or_else(|| "http://localhost:11434".to_string()),
             default_model: default_model.unwrap_or_else(|| "llama3.2".to_string()),
         }
